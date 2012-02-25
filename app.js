@@ -83,7 +83,7 @@ var GenericGraphNode = Backbone.Model.extend({
             return f(args)
         }
         
-        _.map(['add','remove','has'], function(fname) {
+        _.map(['get', 'add', 'remove', 'has'], function(fname) {
             self.fname = decorate(plugfundecorator,self.fname)
         })
 
@@ -101,23 +101,31 @@ var GenericGraphNode = Backbone.Model.extend({
 
         this[ plugplural ] = new Backbone.Collection()
         
-        this[ 'add' + plugsingular ] = decorate(decorators.multiArg,function(obj) { return self.add.call(self,plugplural,obj) })
-        this[ 'del' + plugsingular ] = decorate(decorators.multiArg,function(obj) { return self.remove.call(self,plugplural,obj) })
-        this[ 'has' + plugsingular ] = function(obj) { return self.has.call(self,plugplural,obj) }
-        this[ 'get' + plugplural ] = function(obj) { return self[plugplural].models }
+        this[ 'add' + plugsingular ] = decorate(decorators.multiArg,function(obj) { return self.plugadd.call(self,plugplural,obj) })
+        this[ 'del' + plugsingular ] = decorate(decorators.multiArg,function(obj) { return self.plugremove.call(self,plugplural,obj) })
+        this[ 'has' + plugsingular ] = function(obj) { return self.plughas.call(self,plugplural,obj) }
+        this[ 'get' + plugsingular ] = function() { return _.first(self.plugget.call(self,plugplural)) }
+        this[ 'get' + plugplural ] = function() { return self.plugget.call(self,plugplural) }
+
     },
 
-    add: function(plug,obj) {
-        this[plug].add(obj)
+    plugget: function(plug) {
+        return this[plug].models
     },
 
-    remove: function(plug,obj) {
+    plugadd: function(plug,obj) {
+        //console.log(this.get('name'), 'add', plug,obj.get('name'))
+        if (!this.plughas(plug,obj)) { this[plug].add(obj) }
+    },
+
+    plugremove: function(plug,obj) {
         this[plug].remove(obj)
     },
 
-    has: function(plug, obj) {
+    plughas: function(plug, obj) {
         return (this[plug].indexOf(obj) != -1)
     },
+
 
 })
 
@@ -125,28 +133,44 @@ var GenericGraphNode = Backbone.Model.extend({
 // GraphNode specializes GenericGraphNode by adding 'children' and 'parents' plugs
 var GraphNode = GenericGraphNode.extend4000({
     initialize: function() {
+        var self = this;
+
         this.addplug('parents','parent')
         this.addplug('children','child')
+        
+        this.parents.on('add',function(obj) {
+            obj.addchild(self)
+        })
+
+
+        this.children.on('add',function(obj) {
+            obj.addparent(self)
+        })
+
+ 
+       /*
+        this.on('addparent', function(model,obj) {
+            obj.addchild(self)
+        })
+
+        this.on('addchild', function(model,obj) {
+            obj.addparent(self)
+        })
+        */
+        
+    }
+})
+
+
+var CommNode = GraphNode.extend4000({
+    MsgIn: function(message) {
+        return _.flatten(this.children.map(function(child) {  return child.MsgIn(message) }))
+    },
+
+    MsgOut: function(message) {
+        return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message) }))
     }
 })
 
 
 
-
-var a = new GraphNode()
-var b = new GraphNode()
-console.log(a.parents)
-
-var c = new Backbone.Model()
-
-a.addparent(c)
-
-console.log(a.hasparent(c))
-console.log(b.hasparent(c))
-
-
-
-
-//console.log(a.parents)
-
-console.log(_.keys(a.plugs))
