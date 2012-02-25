@@ -3,8 +3,7 @@ framework for everything 4
 
 lately, whatever I work on, I keep making parts of the same program, this is an attempt to write it fully and win at programming.
 
-communication framework in js (browser or node), 4th iteration
-its a graph structure of parsers of abstract messages. yes, this sounds like actors and I should read up on them.
+this is a graph structure of parsers of abstract messages. yes, this sounds like actors and I should read up on them some more.
 
 to be distributed it supports different transport protocols, things like retransmitions, automatic fallback for transport protocols, pattern matching, requrest/response middleware, and things like that. 
 
