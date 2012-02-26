@@ -1,3 +1,21 @@
+// notes from comm framework 3:
+
+// Permissions - it could accept a JSON schema instead of just attribute list
+//
+// What if multiple talkers respond to a message? List of messages should be sent in one shot. 
+// this will allow for transports like http to send multiple responses, instead of sending first and closing the connection.
+//
+// objecttalker should have different buckets for different object types
+// it should be more symmetric. I'd like for clients to be able to create new objects.
+//
+// abstract permissions/output/input/persist
+// there should be no difference between objectsync receiving an object from db or from remote host
+// another reason for symetric input/output
+// make it so that comm elements can be remote/persistable objects
+// figure out the initialization (phonebook for example)
+// callbacks are super ugly
+
+
 var Backbone = require('backbone');
 var _ = require('underscore')
 var decorators = require('decorators');
@@ -96,7 +114,7 @@ var GenericGraphNode = Backbone.Model.extend({
 
     addplug: function(plugplural, plugsingular, nomodels) {
         var self = this;
-
+        if (!plugsingular) { plugsingular = plugplural }
         this.plugs[plugplural] = true
 
         this[ plugplural ] = new Backbone.Collection()
@@ -124,9 +142,7 @@ var GenericGraphNode = Backbone.Model.extend({
 
     plughas: function(plug, obj) {
         return (this[plug].indexOf(obj) != -1)
-    },
-
-
+    }
 })
 
 
@@ -145,32 +161,53 @@ var GraphNode = GenericGraphNode.extend4000({
 
         this.children.on('add',function(obj) {
             obj.addparent(self)
-        })
-
- 
-       /*
-        this.on('addparent', function(model,obj) {
-            obj.addchild(self)
-        })
-
-        this.on('addchild', function(model,obj) {
-            obj.addparent(self)
-        })
-        */
-        
+        })        
     }
 })
 
 
 var CommNode = GraphNode.extend4000({
     MsgIn: function(message) {
-        return _.flatten(this.children.map(function(child) {  return child.MsgIn(message) }))
+        return _.flatten(_.union(
+            [ this.Respond(message) ], 
+            this.children.map(function(child) {  return child.MsgIn(message) })
+        ));
     },
 
     MsgOut: function(message) {
         return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message) }))
+    },
+
+    Respond: function(message) {
+        // override me
     }
 })
 
 
+var ObjectSync = CommNode.extend4000({
+    initialize: function() {
+        var self = this;
+        this.addplug('obj')
+        this.obj.on('flush',function(model,changes) {
+            //self.MsgOut(changes)
+        })
+    }
+})
+
+
+var DbObjectSync = ObjectSync.extend4000({ 
+    initialize: function() {},
+    query: function() {},
+})
+
+
+
+
+
+var RemoteModel = Backbone.Model.extend4000({
+    initialize: function() {
+    },
+    flush: function() {        
+    }
+})
 

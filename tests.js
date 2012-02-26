@@ -27,3 +27,14 @@ exports.addParent = function(test){
 };
 
 
+
+
+exports.dbObjectSync = function(test) {
+
+    var a = new DbObjectSync()
+    a.obj.add({test: 3})
+    a.obj.add({test: 2})
+    
+    test.done()
+}
+
