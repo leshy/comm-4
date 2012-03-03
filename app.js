@@ -86,6 +86,55 @@ function toArray(arg) { return Array.prototype.slice.call(arg); }
 
 })();
 
+// simple object that matches json blobs and executes callbacks
+// maybe I should upgrade this to use json schemas as patterns
+var SubscriptionMan = Backbone.Model.extend4000({ 
+    initialize: function() {
+        this.subscriptions = [];
+    },
+    subscribe: function(msg,f,name) { 
+        if (!name) { name = function() { f() }; }
+        this.subscriptions.push({pattern: msg, f: f, name: name});
+        return name;
+    },
+    
+    unsubscribe: function(name) { 
+        this.subscriptions = _.filter(this.subscriptions, function(sub) { return ((sub.name != name) && (sub.f != name)); });
+    },
+
+    oneshot: function(msg,f) {
+        var self = this;
+        function ff() {
+            self.unsubscribe(ff); f.apply(this,attributes);
+        }
+        this.subscribe(msg, ff,ff );
+        return function() { self.unsubscribe(ff); };
+    },
+
+    _matches: function(msg) {
+        function checkmatch(msg,pattern) {
+	        for (var property in pattern) {
+	            if (msg[property] == undefined) { return false; }
+	            if (pattern[property] != true) { if (msg[property] != pattern[property]) { return false; } }
+	        }
+	        return true;
+        }
+
+        var res = [];
+        
+        this.subscriptions.forEach(function(matcher) {
+	        var pattern = matcher.pattern;
+	        if (checkmatch(msg,pattern)) { res.push (matcher.f);  }
+        });
+        return res;
+    },
+
+    event: function(msg) { 	
+        this._matches(msg).forEach( function(f) { f(msg); } );
+    }
+});
+
+
 // a node that connects to other nodes via 'plugs'
 // plug is just a name of collection that contains other nodes
 // GraphNode specializes GenericGraphNode by adding 'children' and 'parents' plugs
