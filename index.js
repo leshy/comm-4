@@ -47,13 +47,6 @@ function cb() {
 
 
 
-function cborarg(f, args, next) {
-    args.push(next)
-    var res = f.call(this,args)
-    if (res) { next(res) }
-}
-
-
 // defaults attribute inheritance, and automatic super.initialize calls
 (function () {
     function extend4000 () {
@@ -239,43 +232,33 @@ var MsgNode = Backbone.Model.extend4000(
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
             console.log(">>>", this.get('name'), message.body);
-
-            // msgInMod can give a response via callback or via return
-            if (this.MsgInMod) { message = this.MsgInMod(message, next) }
-            if (!message) { return } else { next(message) }
-
+            message = this.MsgInMod(message)
+            if (!message) { return }
             var self = this
-
-            function next(message) { 
-                async.parallel(
-                    this.children.map(function(child) { 
-                        return function(callback) { child.lobby.MsgIn(message,callback) }
-                    }).concat(
-                        function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,callback]) }
-                    ),
-                    function(err,data) { callback(err,_.flatten(data)) }
-                )
-            }
+            async.parallel(
+                this.children.map(function(child) { 
+                    return function(callback) { child.lobby.MsgIn(message,callback) }
+                }).concat(
+                    function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,callback]) }
+                ),
+                function(err,data) { callback(err,_.flatten(data)) }
+            )
         }),
 
         send: decorate(MakeObjReceiver(Msg),function(message) {
             this.MsgOut(message);
         }),
         
-        MsgOut: function(message,callback) {
+        MsgOut: function(message) {
             console.log("<<<", this.get('name'), message.body);
-            if (this.MsgOutMod) { message = this.MsgOutMod(message,next)  }
-            
-            if (!message) { return } else { next(message) }
-            
-            function next(message) {
-                return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
-            }
+            message = this.MsgOutMod(message)
+            if (!message) { return }
+            return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         },
 
-        //MsgInMod: function(message,callback) { return message },
+        MsgInMod: function(message,callback) { return message },
 
-        //MsgOutMod: function(message,callback) { return message }
+        MsgOutMod: function(message,callback) { return message }
     });
 
 
