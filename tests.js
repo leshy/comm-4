@@ -1,5 +1,5 @@
 var fs = require('fs')
-var expression = fs.readFileSync('./app.js','utf8');
+var expression = fs.readFileSync('./index.js','utf8');
 eval(expression);
 
 
