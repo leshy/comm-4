@@ -23,7 +23,7 @@
 //  - lobby is a graph edge already (almost) no need for this.
 
 // responses of children -> switch to functions with callbacks, use async.parallel
-// introspective functions for collectionexposers
+// done
 
 
 var Backbone = require('backbone');
@@ -45,6 +45,13 @@ function cb() {
     if (callback) { callback.apply(this,args) }
 }
 
+
+
+function cborarg(f, args, next) {
+    args.push(next)
+    var res = f.call(this,args)
+    if (res) { next(res) }
+}
 
 
 // defaults attribute inheritance, and automatic super.initialize calls
@@ -232,33 +239,43 @@ var MsgNode = Backbone.Model.extend4000(
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
             console.log(">>>", this.get('name'), message.body);
-            message = this.MsgInMod(message)
-            if (!message) { return }
+
+            // msgInMod can give a response via callback or via return
+            if (this.MsgInMod) { message = this.MsgInMod(message, next) }
+            if (!message) { return } else { next(message) }
+
             var self = this
-            async.parallel(
-                this.children.map(function(child) { 
-                    return function(callback) { child.lobby.MsgIn(message,callback) }
-                }).concat(
-                    function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,callback]) }
-                ),
-                function(err,data) { callback(err,_.flatten(data)) }
-            )
+
+            function next(message) { 
+                async.parallel(
+                    this.children.map(function(child) { 
+                        return function(callback) { child.lobby.MsgIn(message,callback) }
+                    }).concat(
+                        function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,callback]) }
+                    ),
+                    function(err,data) { callback(err,_.flatten(data)) }
+                )
+            }
         }),
 
         send: decorate(MakeObjReceiver(Msg),function(message) {
             this.MsgOut(message);
         }),
         
-        MsgOut: function(message) {
+        MsgOut: function(message,callback) {
             console.log("<<<", this.get('name'), message.body);
-            message = this.MsgOutMod(message)
-            if (!message) { return }
-            return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
+            if (this.MsgOutMod) { message = this.MsgOutMod(message,next)  }
+            
+            if (!message) { return } else { next(message) }
+            
+            function next(message) {
+                return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
+            }
         },
 
-        MsgInMod: function(message) { return message },
+        //MsgInMod: function(message,callback) { return message },
 
-        MsgOutMod: function(message) { return message }
+        //MsgOutMod: function(message,callback) { return message }
     });
 
 
@@ -319,7 +336,7 @@ var DbCollection = Collection.extend4000({
         if (!model && !(model = this.get('model'))) {
             throw ("can't resolve model for data",data)
         }
-
+        
         return model
     },
 
@@ -329,25 +346,34 @@ var DbCollection = Collection.extend4000({
         var self = this;
         this.get('collection').find(filter,function(err,cursor) {
             cursor.toArray(function(err,array) {
-                var model = self.get('model')
-                callback(undefined, _.map(array, function(data) { return new model(data) }))
+                callback(undefined, array)
             })
         })
     },
     
-    create: function(data) { 
-        var model = this.get('model')        
-        entry = new model(data)
+    create: function(data,callback) { 
+        var model = this.get('model')
+        console.log("db create", data)
+        this.get('collection').insert(data,function(err,data) {
+            console.log(err,data)
+            callback(err,data)
+        })
     },
 
     update: function(findOne,data,callback) {
-        this.get('collection').update(findOne, data, callbacK)
-    },
-
-    flush: function(model,changes) {
-        //this.update({ _id: model._id }, model.render('collection', changes))
+        this.get('collection').update(findOne, data, function(err,data) {
+            if (!err) { self.trigger('updated',msg.o.id, msg.o) }
+            callback(err,data)
+        })
     }
 })
+
+
+function cbtomsg(callback) {
+    return function(err,data) {
+        callback(undefined,new Msg({err: err,data:data}))
+    }
+}
 
 
 var CollectionExposer = MsgNode.extend4000({
@@ -358,47 +384,54 @@ var CollectionExposer = MsgNode.extend4000({
               },
 
     initialize: function() {
+        this.lobby.Allow({collection: this.get('model').prototype.defaults.name})
         this.subscribe({filter: true}, this.filterMsg.bind(this))
         this.subscribe({create: true}, this.createMsg.bind(this))
+        this.subscribe({update: true}, this.updateMsg.bind(this))
     },
 
-    filterMsg: function(msg,callback) { this.filter(msg.body.filter, callback, msg.body.limits) },
+    filterMsg: function(msg,callback) { 
+        var self = this;
+        var origin = msg.body.origin
+
+        this.filter(msg.body.filter, function(err,data) {
+
+            callback(err,data.map(function(entry) {
+                entry.id = entry._id
+                delete entry._id
+                var model = self.resolveModel(entry)
+                var instance = new model(entry)
+                return instance.render(origin)
+            }))
+
+        }, msg.body.limits)
+    },
 
     updateMsg: function(msg,callback) {
         var model = this.resolveModel(msg.o)
-        
+        var self = this;
         var err;
-        if ((err = this.verifypermissions.call(this,msg.origin,msg.o)) !== false) {
-            callback(err)
+        if ((err = model.prototype.applypermissions.call(this,msg.origin,msg.o)) !== false) {
+            cbtomsg(callback)(err)
             return
         }
         
-        this.update(msg.o.id, msg.o, callback)
+        this.update({_id: BSON.ObjectID(msg.o.id)},msg.o, function(err,data) {
+        })
 
     },
-    
+
     createMsg: function(msg,callback) { 
-        var instance = new this.resolveModel(msg.o)
+        var model = this.resolveModel(msg.o)
+        console.log("RESOLVED MODEL",model.prototype.defaults.name)
 
         var err;
-        if ((err = instance.verifypermissions.call(this,msg.origin,msg.o)) !== false) {
-            callback(err)
+        if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.create])) !== false) {
+            cbtomsg(callback)(err)
             return
         }
 
-        
-
-
-        console.log('createmsg!',msg.body)
-        callback(undefined,true)
-        return
-        var newobj = new this.get('model')
-        async.series([ 
-            function(callback) { newobj.update('api', msg.body.create, callback) },
-            newobj.flush
-        ], function(err,data) {
-            callback(err,data)
-        })
+        this.create(msg.body.create,cbtomsg(callback))
     }
 })
 
@@ -422,8 +455,6 @@ var PermissionFilter = MsgNode.extend4000({
     }
 })
 
-
-
 var RemoteModel = Backbone.Model.extend4000({
     initialize: function() {
         this.changes = {}
@@ -436,13 +467,53 @@ var RemoteModel = Backbone.Model.extend4000({
     // call to persist/propagade an object after changes.
     flush: function(callback) {
         if (!this.changes)  { return }
-        
+        var self = this;
 
+        // add id to all flush messages
+        if (this.get('id')) { this.changes.id = true }
+        
+        // resolve changes
+        //_.map(this.changes, function(val,key) { self.changes[key] = self.attributes[key] })
+        
+        // send msg to the store
+        //this.get('owner').MsgIn( new Msg({ origin: "store",  o: this.changes }) )
+        var data = this.render('store', _.keys(this.changes))
+
+        if (!data.id) {
+            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), callback )
+        } else {
+            this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback )
+        }
+       
         this.changes = {};
+    },
+
+    verifypermissions: function(origin,data) {
+        console.log("green lighting", origin)
+        return false
     },
 
     _applypermission: function(attribute,permission) {
         
+    },
+
+    render: function(origin, attributes) {
+        if (!attributes) { 
+            attributes = _.keys(this.attributes)
+        }
+        
+        var res = {}
+        var self = this;
+        var permissions = this.get('permissions')[origin]
+
+        _.map(attributes, function(attribute) {
+            if (!permissions[attribute]) { return false }
+            res[attribute] = self.attributes[attribute]
+        })
+
+        if (id = this.get('id')) { res.id = id }
+        return res
+        return JSON.parse(JSON.stringify(res))
     },
 
     call: function(permission, f, args) {
@@ -457,7 +528,7 @@ var RemoteModel = Backbone.Model.extend4000({
         
     },
     
-    destroy: function() {
+    delete: function() {
         
     }
 })
@@ -468,6 +539,4 @@ exports.PermissionFilter = PermissionFilter
 exports.RemoteModel = RemoteModel
 exports.DbCollection = DbCollection
 exports.CollectionExposer = CollectionExposer
-
-
 
