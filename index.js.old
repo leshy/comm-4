@@ -191,36 +191,15 @@ var MsgSubscriptionMan = SubscriptionMan.extend4000({
     })
 });
 
-
-// function, arg1...argX, callback
-// callback is passed to a function as a last argument, but
-// if a function returns some data, callback is called with that data immediately
-// 
-// used in places where we'd like to accept a function that takes a callback OR the one that returns right away.
-//
-function maybeCb() {
-    var args = toArray(arguments)
-    var f = args.shift()
-    var callback = _.last(args)
-    var response = f.apply(this,args)
-    if (!response) { return }
-    if (response.constructor != Array) { throw "function didn't return array, [err, data] expected" }
-    if (response.length != 2) { throw "function didn't return array with correct size [err, data]" }
-    callback.apply(this,response)    
-}
-
 var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
-    MsgIn: decorate(MakeObjReceiver(Msg), function(msg,callbackdone) {
+    MsgIn: decorate(MakeObjReceiver(Msg), function(msg,callback) {
         // get a list of functions that care about this message
         var flist = this._matches(msg.body).map( 
-            function(f) { return function(callback) { 
-                // function can accept callback OR it can return a reply right away
-                maybeCb(f,msg,callback)
-            }}
+            function(f) { return function(callback) { f(msg, callback); }}
         );
         // boooom
-        async.parallel(flist,callbackdone)
-    }),
+        async.parallel(flist,callback)
+    })
 });
 
 var Lobby = MsgSubscriptionManAsync.extend4000({ 
@@ -427,6 +406,8 @@ var CollectionExposer = MsgNode.extend4000({
 
     createMsg: function(msg,callback) { 
         var model = this.resolveModel(msg.o)
+        console.log("RESOLVED MODEL",model.prototype.defaults.name)
+
         var err;
         if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.create])) !== false) {
             cbtomsg(callback)(err)
@@ -541,4 +522,4 @@ exports.PermissionFilter = PermissionFilter
 exports.RemoteModel = RemoteModel
 exports.DbCollection = DbCollection
 exports.CollectionExposer = CollectionExposer
-exports.MsgSubscriptionManAsync = MsgSubscriptionManAsync
+
