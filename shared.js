@@ -324,6 +324,9 @@ var RemoteModel = Backbone.Model.extend4000({
     initialize: function() {
         this.changes = {}
         // smarter json diff can be implemented here.
+        if (!this.get("id")) {
+            this.changes = _.reduce(_.keys(this.attributes), function(all, key) { all[key] = true; return all }, {})
+        }
         this.bind('change',function(model,change) {
             _.extend(this.changes,change.changes)
         }.bind(this))
