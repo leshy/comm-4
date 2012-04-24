@@ -75,7 +75,6 @@ var DbCollection = Collection.extend4000({
         var model = undefined
         // I'm enjoying writing these conditionals like this and I'm being a douschebag, 
         // I know its confusing
-        
         this.ModelResolver && (model = this.ModelResolver(data))
         if (!model && !(model = this.get('model'))) {
             throw ("can't resolve model for data",data)
@@ -86,12 +85,12 @@ var DbCollection = Collection.extend4000({
 
     filter: function() { this.find.apply(this,arguments) },
 
-    find: function(filter,callback,limits) {
+    find: function(filter,limits,callback) {
         var self = this;
-        this.get('collection').find(filter,function(err,cursor) {
-            cursor.toArray(function(err,array) {
-                callback(undefined, array)
-            })
+        if (!limits) { limits = {} }
+        this.get('collection').find(filter,limits,function(err,cursor) {
+//            console.log("ERR",err)
+            callback(err, cursor)
         })
     },
     
@@ -104,9 +103,13 @@ var DbCollection = Collection.extend4000({
         })
     },
 
+    remove: function(find,callback) {
+        this.get('collection').remove(find,callback)
+    },
+
     update: function(findOne,data,callback) {
-        this.get('collection').update(findOne, data, function(err,data) {
-            if (!err) { self.trigger('updated',msg.o.id, msg.o) }
+        this.get('collection').update(findOne, { '$set' : data }, function(err,data) {
+//            if (!err) { self.trigger('updated',findOne, msg.o) }
             callback(err,data)
         })
     }
@@ -122,41 +125,50 @@ var CollectionExposer = MsgNode.extend4000({
               },
 
     initialize: function() {
-        this.lobby.Allow({collection: this.get('model').prototype.defaults.name})
-        this.subscribe({filter: true}, this.filterMsg.bind(this))
-        this.subscribe({create: true}, this.createMsg.bind(this))
-        this.subscribe({update: true}, this.updateMsg.bind(this))
+        console.log("ALLOW",{body: {collection: this.get('model').prototype.defaults.name}})
+        this.lobby.Allow({body: {collection: this.get('model').prototype.defaults.name}})
+        this.subscribe({body: {filter: true}}, this.filterMsg.bind(this))
+        this.subscribe({body: {create: true}}, this.createMsg.bind(this))
+        this.subscribe({body: {update: true}}, this.updateMsg.bind(this))
+        this.subscribe({body: {remove: true}}, this.removeMsg.bind(this))
     },
-
+    
+    removeMsg: function(msg,callback) {
+        this.remove({ "_id": BSON.ObjectID(msg.body.remove) })
+        callback()
+    },
 
     filterMsg: function(msg,callback,response) { 
         var self = this;
         var origin = msg.body.origin
-
-        this.filter(msg.body.filter, function(err,cursor) {
-            cursor.forEach(function(entry) {
+        if (!msg.body.limits) { msg.body.limits = {} }
+        this.filter(msg.body.filter, msg.body.limits, function(err,cursor) {
+            cursor.each(function(err,entry) {
+                if (!entry) { response.end(); return }
                 entry.id = String(entry._id)
                 delete entry._id
                 var model = self.resolveModel(entry)
                 var instance = new model(entry)
 
-                response.write(new Msg(instance.render(origin)))
+                response.write(new Msg({o: instance.render(origin)}))
             })
-            response.end()
+            
             
         }, msg.body.limits)
     },
 
     updateMsg: function(msg,callback) {
-        var model = this.resolveModel(msg.o)
+        var model = this.resolveModel(msg.update)
         var self = this;
         var err;
-        if ((err = model.prototype.applypermissions.call(this,msg.origin,msg.o)) !== false) {
-            cbtomsg(callback)(err)
+        if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.update])) !== false) {
+            callback(err)
             return
         }
-        
-        this.update({_id: BSON.ObjectID(msg.o.id)},msg.o, function(err,data) {
+        var id = BSON.ObjectID(msg.body.update.id)
+        delete msg.body.update['id']
+
+        this.update({_id: id},msg.body.update, function(err,data) {
         })
 
     },
@@ -165,11 +177,11 @@ var CollectionExposer = MsgNode.extend4000({
         var model = this.resolveModel(msg.o)
         var err;
         if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.create])) !== false) {
-            cbtomsg(callback)(err)
+            callback(err)
             return
         }
 
-        this.create(msg.body.create,cbtomsg(callback))
+        this.create(msg.body.create,function(err,data) { callback() })
     }
 })
 
