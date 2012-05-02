@@ -25,6 +25,7 @@
 // responses of children -> switch to functions with callbacks, use async.parallel
 // done
 
+// each msgparser could return an iterator object? SWEET
 
 var Backbone = require('backbone');
 var _ = require('underscore');
@@ -34,7 +35,6 @@ var graph = require('graph')
 var async = require('async')
 var BSON = require('mongodb').BSONPure
 var fs = require('fs')
-
 
 var expression = fs.readFileSync('node_modules/comm4/shared.js','utf8');
 eval(expression)
@@ -106,14 +106,32 @@ var DbCollection = Collection.extend4000({
         this.get('collection').remove(find,callback)
     },
 
-    update: function(findOne,data,callback) {
-        this.get('collection').update(findOne, { '$set' : data }, function(err,data) {
-//            if (!err) { self.trigger('updated',findOne, msg.o) }
+    update: function(select,data,callback) {
+        this.get('collection').update(select, { '$set' : data }, function(err,data) {
+            console.log("RES",err,data)
             callback(err,data)
         })
     }
 })
 
+
+// receives mongodb query cursor and collection exposer
+// and creates a fake 'cursor' that returns instances of models instead of just raw data
+var ModelIterator = function(exposer,cursor) {
+    this.exposer = exposer
+    this.cursor = cursor
+}
+
+// this makes it a valid interator
+ModelIterator.prototype.next = function() {
+    var data = this.cursor.next()
+    var model = this.exposer.resolveModel(data)
+    return new model(data)
+}
+
+iterators.MakeIterator(ModelIterator.prototype)
+
+// define some iteration helpers
 
 
 var CollectionExposer = MsgNode.extend4000({
@@ -137,10 +155,22 @@ var CollectionExposer = MsgNode.extend4000({
         callback()
     },
 
+    filtermodels: function(filter,limits,callback) {
+        var self = this
+        // how to I build a classic interator out of object that supports next() ?
+        this.filter(filter,limits,function(err,cursor) {
+            if (err) { callback(err); return }
+            callback(err, ModelIterator(self,cursor))
+        })
+    },
+
     filterMsg: function(msg,callback,response) { 
         var self = this;
         var origin = msg.body.origin
         if (!msg.body.limits) { msg.body.limits = {} }
+        
+        /*
+        
         this.filter(msg.body.filter, msg.body.limits, function(err,cursor) {
             cursor.each(function(err,entry) {
                 if (!entry) { response.end(); return }
@@ -151,6 +181,16 @@ var CollectionExposer = MsgNode.extend4000({
                 response.write(new Msg({o: instance.render(origin)}))
             })
         }, msg.body.limits)
+
+        */
+
+        this.filtermodels(msg.body.filter, msg.body.limits, function(err,models) {
+            models.each(function(model) {
+                response.write(new Msg({o: model.render(origin)}))
+            })
+         })
+
+
     },
 
     updateMsg: function(msg,callback) {
@@ -161,10 +201,15 @@ var CollectionExposer = MsgNode.extend4000({
             callback(err)
             return
         }
-        var id = BSON.ObjectID(msg.body.update.id)
-        delete msg.body.update['id']
+        if (!msg.body.select) {
+            msg.body.select = { _id: msg.body.update.id }
+        }
+        if (msg.body.select.id) { msg.body.select._id = msg.body.select.id; delete msg.body.select['id'] }
 
-        this.update({_id: id},msg.body.update, function(err,data) {
+        msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
+
+        console.log('db.task.update',msg.body.select, msg.body.update)
+        this.update(msg.body.select,msg.body.update, function(err,data) {
         })
 
     },
@@ -184,6 +229,8 @@ var CollectionExposer = MsgNode.extend4000({
             callback(err,new Msg({created:String(data[0]._id)}))
         })
     }
+
+
 })
 
 
