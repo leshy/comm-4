@@ -98,7 +98,6 @@ var DbCollection = Collection.extend4000({
         var model = this.get('model')
         console.log("db create", data)
         this.get('collection').insert(data,function(err,data) {
-            console.log(err,data)
             callback(err,data)
         })
     },
@@ -178,7 +177,6 @@ var CollectionExposer = MsgNode.extend4000({
                 delete entry._id
                 var model = self.resolveModel(entry)
                 var instance = new model(entry)
-
                 response.write(new Msg({o: instance.render(origin)}))
             })
         }, msg.body.limits)
@@ -223,10 +221,13 @@ var CollectionExposer = MsgNode.extend4000({
         }
 
         var instance = new model(msg.body.create)
-        instance.trigger('create')
+        instance.trigger('precreate')
         // this feels a bit upside down, maybe instance.flush should be called here?
         // also, maybe accept instance as O in messages
-        this.create(instance.render('store'),function(err,data) { callback() })
+        this.create(instance.render('store'),function(err,data) { 
+            instance.trigger('create')
+            callback(err,new Msg({created:String(data[0]._id)}))
+        })
     }
 
 
