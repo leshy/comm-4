@@ -98,7 +98,6 @@ var DbCollection = Collection.extend4000({
         var model = this.get('model')
         console.log("db create", data)
         this.get('collection').insert(data,function(err,data) {
-            console.log(err,data)
             callback(err,data)
         })
     },
@@ -149,11 +148,8 @@ var CollectionExposer = MsgNode.extend4000({
                 delete entry._id
                 var model = self.resolveModel(entry)
                 var instance = new model(entry)
-
                 response.write(new Msg({o: instance.render(origin)}))
             })
-            
-            
         }, msg.body.limits)
     },
 
@@ -174,14 +170,19 @@ var CollectionExposer = MsgNode.extend4000({
     },
 
     createMsg: function(msg,callback) { 
-        var model = this.resolveModel(msg.o)
+        var model = this.resolveModel(msg.body.create)
         var err;
         if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.create])) !== false) {
             callback(err)
             return
         }
 
-        this.create(msg.body.create,function(err,data) { callback() })
+        var instance = new model(msg.body.create)
+        instance.trigger('precreate')
+        this.create(instance.render('store'),function(err,data) { 
+            instance.trigger('postcreate')
+            callback(err,new Msg({created:String(data[0]._id)}))
+        })
     }
 })
 
