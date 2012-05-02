@@ -268,7 +268,7 @@ var MsgNode = Backbone.Model.extend4000(
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
-            console.log(">>>", this.get('name'), message);
+//            console.log(">>>", this.get('name'), message);
 
             if (!message) { return }
             var self = this
