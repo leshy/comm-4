@@ -286,7 +286,7 @@ var MsgNode = Backbone.Model.extend4000(
                     {
                         _.map(data, function(msg) { self.MsgOut(msg) })
                     }
-                    callback(err)
+                    if (callback) { callback(err) }
                 })
         }),
 
@@ -345,10 +345,12 @@ var RemoteModel = Backbone.Model.extend4000({
         
         // send msg to the store
         //this.get('owner').MsgIn( new Msg({ origin: "store",  o: this.changes }) )
-        var data = this.render('store', _.keys(this.changes))
         
+        var data = this.render('store', _.keys(this.changes))
+
         if (!data.id) {
-            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), callback )
+            this.trigger('create')
+            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), callback)
         } else {
             this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback )
         }

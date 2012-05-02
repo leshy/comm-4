@@ -123,6 +123,7 @@ var ModelIterator = function(exposer,cursor) {
     this.cursor = cursor
 }
 
+/*
 // this makes it a valid interator
 ModelIterator.prototype.next = function() {
     var data = this.cursor.next()
@@ -130,8 +131,8 @@ ModelIterator.prototype.next = function() {
     return new model(data)
 }
 
-iterators.MakeIterator(ModelIterator.prototype)
-
+//iterators.MakeIterator(ModelIterator.prototype)
+*/
 // define some iteration helpers
 
 
@@ -170,8 +171,6 @@ var CollectionExposer = MsgNode.extend4000({
         var origin = msg.body.origin
         if (!msg.body.limits) { msg.body.limits = {} }
         
-        /*
-        
         this.filter(msg.body.filter, msg.body.limits, function(err,cursor) {
             cursor.each(function(err,entry) {
                 if (!entry) { response.end(); return }
@@ -183,15 +182,14 @@ var CollectionExposer = MsgNode.extend4000({
                 response.write(new Msg({o: instance.render(origin)}))
             })
         }, msg.body.limits)
-
-        */
+        /*
 
         this.filtermodels(msg.body.filter, msg.body.limits, function(err,models) {
             models.each(function(model) {
                 response.write(new Msg({o: model.render(origin)}))
             })
          })
-
+         */
 
     },
 
@@ -224,7 +222,11 @@ var CollectionExposer = MsgNode.extend4000({
             return
         }
 
-        this.create(msg.body.create,function(err,data) { callback() })
+        var instance = new model(msg.body.create)
+        instance.trigger('create')
+        // this feels a bit upside down, maybe instance.flush should be called here?
+        // also, maybe accept instance as O in messages
+        this.create(instance.render('store'),function(err,data) { callback() })
     }
 
 
