@@ -191,11 +191,13 @@ function Response(msg,node,callback) {
     this.node = node
     this.msg = msg 
     this.end = function(data) {
+        this.end = true
         callback(data)
     }
     var self = this;
     this.write = 
         function(reply) { 
+//            if (this.end) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
             if (!reply) { return }
             if (!reply.body.queryid) { reply.body.queryid = msg.body.queryid }
             reply.meta = _.extend(reply.meta,msg.meta)
@@ -210,6 +212,7 @@ var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
         var self = this;
 
         var flist = this._matches(msg).map( 
+
             function(f) { return function(callback) { 
                 // function can accept callback OR it can return a reply right away
 
@@ -217,14 +220,13 @@ var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
                 f(msg,function(err,responsemsg) { 
                     
                     if (!responsemsg) { callback(err); return }
-
-                    
                     if (msg.body.queryid && !responsemsg.body.queryid)  { responsemsg.body.queryid = msg.body.queryid }
 
                     responsemsg.meta = _.extend(responsemsg.meta,msg.meta)
                     callback(err,responsemsg)
                 },response)
             }}
+
         ); 
         // boooom
         async.parallel(flist,callbackdone)
@@ -255,6 +257,7 @@ var Lobby = MsgSubscriptionManAsync.extend4000({
 // this is the main part of clientside message dispatch system.
 // MsgNodes are chained and pass messages thorugh each other until the last parent kicks them out into the world.
 //
+
 var MsgNode = Backbone.Model.extend4000(
     graph.GraphNode,
     MsgSubscriptionManAsync,
@@ -348,7 +351,7 @@ var RemoteModel = Backbone.Model.extend4000({
         var data = this.render('store', _.keys(this.changes))
         
         if (!data.id) {
-            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), callback )
+            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), function() {} )
         } else {
             this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback )
         }
@@ -385,6 +388,7 @@ var RemoteModel = Backbone.Model.extend4000({
     },
 
     remove: function(callback) {
+        console.log('CALLING REMOVE remove',{remove: this.get('id')})
         this.get('owner').MsgIn( new Msg({ origin: "store",  remove: this.get('id') }), callback )
     },
 
