@@ -107,6 +107,7 @@ var DbCollection = Collection.extend4000({
     },
 
     update: function(select,data,callback) {
+        console.log('updating', this.get('name'), select,data)
         this.get('collection').update(select, { '$set' : data }, function(err,data) {
             console.log("RES",err,data)
             callback(err,data)
@@ -143,7 +144,6 @@ var CollectionExposer = MsgNode.extend4000({
               },
 
     initialize: function() {
-        console.log("ALLOW",{body: {collection: this.get('model').prototype.defaults.name}})
         this.lobby.Allow({body: {collection: this.get('model').prototype.defaults.name}})
         this.subscribe({body: {filter: true}}, this.filterMsg.bind(this))
         this.subscribe({body: {create: true}}, this.createMsg.bind(this))
@@ -152,7 +152,7 @@ var CollectionExposer = MsgNode.extend4000({
     },
     
     removeMsg: function(msg,callback) {
-        this.remove({ "_id": BSON.ObjectID(msg.body.remove) })
+        this.remove(msg.body.o)
         callback()
     },
 
@@ -202,11 +202,15 @@ var CollectionExposer = MsgNode.extend4000({
         if (!msg.body.select) {
             msg.body.select = { _id: msg.body.update.id }
         }
-        if (msg.body.select.id) { msg.body.select._id = msg.body.select.id; delete msg.body.select['id'] }
+        if (msg.body.select.id) { 
+            msg.body.select._id = msg.body.select.id; delete msg.body.select['id'] 
+        }
+        
+        if (msg.body.select._id) {
+            msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
+        }
 
-        msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
-
-        console.log('db.task.update',msg.body.select, msg.body.update)
+        console.log('db.update',msg.body.select, msg.body.update)
         this.update(msg.body.select,msg.body.update, function(err,data) {
         })
 
@@ -229,8 +233,6 @@ var CollectionExposer = MsgNode.extend4000({
             callback(err,new Msg({created:String(data[0]._id)}))
         })
     }
-
-
 })
 
 
