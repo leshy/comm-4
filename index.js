@@ -68,7 +68,6 @@ var DbCollection = Collection.extend4000({
     
     log: function() { if (this.l) { this.l.log.apply(this.l,arguments) } },
 
-
     // receives data from the db and figures out which model should be instantiated
     // looks up modelresolver function and this.model attribute.
     resolveModel: function(data) {
@@ -78,8 +77,7 @@ var DbCollection = Collection.extend4000({
         this.ModelResolver && (model = this.ModelResolver(data))
         if (!model && !(model = this.get('model'))) {
             throw ("can't resolve model for data",data)
-        }
-        
+        }        
         return model
     },
 
@@ -88,18 +86,13 @@ var DbCollection = Collection.extend4000({
     find: function(filter,limits,callback) {
         var self = this;
         if (!limits) { limits = {} }
-        this.get('collection').find(filter,limits,function(err,cursor) {
-//            console.log("ERR",err)
-            callback(err, cursor)
-        })
+        this.get('collection').find(filter,limits,callback)
     },
     
     create: function(data,callback) { 
         var model = this.get('model')
         console.log("db create", data)
-        this.get('collection').insert(data,function(err,data) {
-            callback(err,data)
-        })
+        this.get('collection').insert(data,callback)
     },
 
     remove: function(find,callback) {
@@ -107,11 +100,7 @@ var DbCollection = Collection.extend4000({
     },
 
     update: function(select,data,callback) {
-        console.log('updating', this.get('name'), select,data)
-        this.get('collection').update(select, { '$set' : data }, function(err,data) {
-            console.log("RES",err,data)
-            callback(err,data)
-        })
+        this.get('collection').update(select, { '$set' : data }, callback)
     }
 })
 
@@ -152,8 +141,19 @@ var CollectionExposer = MsgNode.extend4000({
     },
     
     removeMsg: function(msg,callback) {
-        this.remove(msg.body.o)
-        callback()
+        // this should be abstracted, filtermsg, and updatemsg use the same thing
+        if (msg.body.remove.id) { 
+            msg.body.remove._id = msg.body.remove.id; delete msg.body.remove['id'] 
+        }
+        
+        if (msg.body.remove._id) {
+            msg.body.remove._id = new BSON.ObjectID(msg.body.remove._id)
+        }
+
+        this.remove(msg.body.remove, function(err,res) {
+            callback()
+        })
+        
     },
 
     filtermodels: function(filter,limits,callback) {
@@ -210,8 +210,9 @@ var CollectionExposer = MsgNode.extend4000({
             msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
         }
 
-        console.log('db.update',msg.body.select, msg.body.update)
+//        console.log('db.update',msg.body.select, msg.body.update)
         this.update(msg.body.select,msg.body.update, function(err,data) {
+            callback(new Msg({ success: true }))
         })
 
     },

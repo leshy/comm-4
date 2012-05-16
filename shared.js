@@ -271,7 +271,7 @@ var MsgNode = Backbone.Model.extend4000(
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
-            console.log(">>>", this.get('name'), message);
+//            console.log(">>>", this.get('name'), message);
 
             if (!message) { return }
             var self = this
@@ -298,7 +298,7 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
-            console.log("<<<", this.get('name'), message.body);
+//            console.log("<<<", this.get('name'), message.body);
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         },
@@ -390,8 +390,7 @@ var RemoteModel = Backbone.Model.extend4000({
     },
 
     remove: function(callback) {
-        console.log('CALLING REMOVE remove',{remove: this.get('id')})
-        this.get('owner').MsgIn( new Msg({ origin: "store",  remove: this.get('id') }), callback )
+        this.get('owner').MsgIn( new Msg({ origin: "store",  remove: { id: this.get('id') } }), callback )
     },
 
     call: function(permission, f, args) {
