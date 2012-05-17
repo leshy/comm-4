@@ -210,7 +210,6 @@ var CollectionExposer = MsgNode.extend4000({
             msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
         }
 
-//        console.log('db.update',msg.body.select, msg.body.update)
         this.update(msg.body.select,msg.body.update, function(err,data) {
             callback(new Msg({ success: true }))
         })
