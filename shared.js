@@ -335,6 +335,14 @@ var RemoteModel = Backbone.Model.extend4000({
         }.bind(this))
     },
 
+    // atm change event is triggered only if basic types are changed, but not dictionaries or arrays
+    // markdirty needs to be called manually in order to save those changes
+    markdirty: function(property) {
+        var changes = {}
+        changes[property] = this.get('property') 
+        this.trigger('change',this,{ changes: changes})
+    },
+    
     // call to persist/propagade an object after changes.
     flush: function(callback) {
         if (!this.changes)  { return }
