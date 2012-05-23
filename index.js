@@ -105,24 +105,27 @@ var DbCollection = Collection.extend4000({
 })
 
 
-// receives mongodb query cursor and collection exposer
+// sweet jesus! this receives mongodb query cursor and collection exposer
 // and creates a fake 'cursor' that returns instances of models instead of just raw data
-var ModelIterator = function(exposer,cursor) {
-    this.exposer = exposer
+var ModelIterator = function(resolveModel,cursor) {
+    this.resolveModel = resolveModel
     this.cursor = cursor
 }
 
-/*
-// this makes it a valid interator
-ModelIterator.prototype.next = function() {
-    var data = this.cursor.next()
-    var model = this.exposer.resolveModel(data)
-    return new model(data)
+// I need an implementation of an abstract async iterator,
+// that takes an object that implements a next method 
+// and builds an object that supports a shitload of functions, like each, map, reduce, etc.
+// for now, I'll just implement each myself and thats it folks.
+// btw new implementation of javascript supports iterators natively apparently
+ModelIterator.prototype.each = function(callback) {
+    var self = this
+    this.cursor.each(function(err,data) {
+        if (!data) { return }
+        var model = self.resolveModel(data)
+        var instance = new model(data)
+        callback(instance)
+    })
 }
-
-//iterators.MakeIterator(ModelIterator.prototype)
-*/
-// define some iteration helpers
 
 
 var CollectionExposer = MsgNode.extend4000({
@@ -156,12 +159,13 @@ var CollectionExposer = MsgNode.extend4000({
         
     },
 
-    filtermodels: function(filter,limits,callback) {
+    filterModels: function(filter,callback,limits) {
         var self = this
-        // how to I build a classic interator out of object that supports next() ?
+
+        if (!limits) { limits = {} }
         this.filter(filter,limits,function(err,cursor) {
             if (err) { callback(err); return }
-            callback(err, ModelIterator(self,cursor))
+            callback(err, new ModelIterator(self.resolveModel.bind(self),cursor))
         })
     },
 
@@ -204,8 +208,7 @@ var CollectionExposer = MsgNode.extend4000({
         }
         if (msg.body.select.id) { 
             msg.body.select._id = msg.body.select.id; delete msg.body.select['id'] 
-        }
-        
+        }        
         if (msg.body.select._id) {
             msg.body.select._id = new BSON.ObjectID(msg.body.select._id)
         }
@@ -232,7 +235,10 @@ var CollectionExposer = MsgNode.extend4000({
             instance.trigger('create')
             callback(err,new Msg({created:String(data[0]._id)}))
         })
-    }
+    },
+    
+    
+    
 })
 
 
