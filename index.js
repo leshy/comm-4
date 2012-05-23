@@ -36,6 +36,8 @@ var async = require('async')
 var BSON = require('mongodb').BSONPure
 var fs = require('fs')
 
+var helpers = require('helpers')
+
 var expression = fs.readFileSync('node_modules/comm4/shared.js','utf8');
 eval(expression)
 
@@ -69,15 +71,19 @@ var DbCollection = Collection.extend4000({
     log: function() { if (this.l) { this.l.log.apply(this.l,arguments) } },
 
     // receives data from the db and figures out which model should be instantiated
-    // looks up modelresolver function and this.model attribute.
+    // you can override this if you want a more complex algo that decides on the right model for the data
     resolveModel: function(data) {
-        var model = undefined
-        // I'm enjoying writing these conditionals like this and I'm being a douschebag, 
-        // I know its confusing
-        this.ModelResolver && (model = this.ModelResolver(data))
-        if (!model && !(model = this.get('model'))) {
-            throw ("can't resolve model for data",data)
-        }        
+        var model = this.get('model')
+        
+        // type is defined? Try to look up more appropriate model
+        if (data.type) {
+            var differentmodel = undefined
+            if (differentmodel = this.get('types')[data.type]) { return differentmodel }
+            
+            // issue a warning here
+            console.warn("data in " + this.get('name') + " collection has a type defined to " + data.type + " but I couldn't find the appropriate model in my black book of appropriate models (" + this.get('types').join(', ') + ")")
+        }
+        
         return model
     },
 
@@ -132,7 +138,8 @@ var CollectionExposer = MsgNode.extend4000({
     defaults: { store: undefined,
                 accesslevel: 'nobody',
                 name: 'collectionexposer',
-                permissions: {}
+                permissions: {},
+                types: {}
               },
 
     initialize: function() {
@@ -142,6 +149,94 @@ var CollectionExposer = MsgNode.extend4000({
         this.subscribe({body: {update: true}}, this.updateMsg.bind(this))
         this.subscribe({body: {remove: true}}, this.removeMsg.bind(this))
     },
+
+    //
+    // SO, a collectionExposer has models it instantiates when it gets the data from the collection
+    // collection can have a single model, (defined in its model attribute)
+    // OR if multiple models are defined, they need to be named, and each db entry has to have a
+    // 'type' field set to a name of the correct model
+    //
+    // (check this.resolveModel function)
+    // 
+    // definemodel function accepts definition of a backbone model, and optionally the name,
+    // if there is more then one model defined in the exposer, 
+    // it will fail if you didn't supply the name
+    // 
+    defineModel: function() {
+        var args = helpers.toArray(arguments)
+        
+        var name = undefined
+        
+        if (len(args) > 1) { name = args.shift() }        
+        var definition = args.shift()
+        
+
+        // maybe in I won't insist on this in the future... 
+        // no permissions could meen save/share everything.
+        if (!definition.defaults.permissions) { throw 'model needs to have its permissions defined' }
+        if (!definition.defaults.permissions.store) { throw 'model needs to have its "store" permissions defined so that I know how to save it' }        
+
+        // need to figure out a name for this model, and set it to defaults.type
+        // this is such a common thing, I should pby implement/find the implementation of
+        // some kind of arguments parser
+        if (!definition.defaults.type) {
+            if (name) {
+                definition.defaults.type = name
+            } else {
+                definition.defaults.type = name = 'default'
+            }
+        } else {
+            if (name && (name != definition.defaults.type)) {
+                throw "you've specified a name for a model and its type and they are different. they are supposed to be the same thing bro."
+            }
+            name = definition.defaults.type
+        }
+
+
+        // build new model
+        var model = new comm.RemoteModel(definition)
+
+
+        // now we need to figure out how to hook it up to the collection
+        
+        var types = this.get('types')
+
+        // this collection has only one model for now, just save it as a model attribute
+        if (!(_.keys(types).length) && !(this.get('model'))) { 
+            this.set({model : model})
+            return
+        }
+
+        // we have more then one model
+
+        if (types[name]) { throw "Model with a type " + name + " in a collection " + this.get('name') + " already defined" }
+
+        // we'll need to write the type value to a db
+        model.prototype.defaults.permissions.store.type = 1
+
+        // first model needs to write its type down too
+        // (not really, modelresolver would figure it out as this is a default model
+        // but still, for clarity in the db I want to write it down)
+        if (!(_.keys(types).length) && (this.get('model'))) { 
+            var oldmodel = this.get('model')
+            oldmodel.prototype.defaults.permissions.store.type = 1
+            //types[oldmodel.prototype.defaults.type] = oldmodel
+        }
+        
+        // finally, add the definition of a model to a collectionExposer
+        types[name] = model
+    },
+
+    filterModels: function(filter,callback,limits) {
+        var self = this
+
+        if (!limits) { limits = {} }
+        this.filter(filter,limits,function(err,cursor) {
+            if (err) { callback(err); return }
+            callback(err, new ModelIterator(self.resolveModel.bind(self),cursor))
+        })
+    },
+
     
     removeMsg: function(msg,callback) {
         // this should be abstracted, filtermsg, and updatemsg use the same thing
@@ -157,16 +252,6 @@ var CollectionExposer = MsgNode.extend4000({
             callback()
         })
         
-    },
-
-    filterModels: function(filter,callback,limits) {
-        var self = this
-
-        if (!limits) { limits = {} }
-        this.filter(filter,limits,function(err,cursor) {
-            if (err) { callback(err); return }
-            callback(err, new ModelIterator(self.resolveModel.bind(self),cursor))
-        })
     },
 
     filterMsg: function(msg,callback,response) { 
@@ -235,10 +320,10 @@ var CollectionExposer = MsgNode.extend4000({
             instance.trigger('create')
             callback(err,new Msg({created:String(data[0]._id)}))
         })
-    },
+    }
+
     
-    
-    
+
 })
 
 
