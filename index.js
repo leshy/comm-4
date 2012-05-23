@@ -169,7 +169,9 @@ var CollectionExposer = MsgNode.extend4000({
         
         if (len(args) > 1) { name = args.shift() }        
         var definition = args.shift()
-        
+
+        // so that a remotemodel knows who to contact about its changes
+        definition.defaults.owner = this        
 
         // maybe in I won't insist on this in the future... 
         // no permissions could meen save/share everything.
@@ -191,12 +193,13 @@ var CollectionExposer = MsgNode.extend4000({
             }
             name = definition.defaults.type
         }
+        
 
-
+        
         // build new model
         var model = new comm.RemoteModel(definition)
-
-
+        
+        
         // now we need to figure out how to hook it up to the collection
         
         var types = this.get('types')
