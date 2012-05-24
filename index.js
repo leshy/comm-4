@@ -57,7 +57,7 @@ var DbCollection = Collection.extend4000({
         var self = this;
         this.l = this.get('logger')
 
-        if (!db || !collection || (!this.get('model') && !this.get('modelResolver'))) { throw ("What is this I don't even (" + this.get('name')) + ")" }
+        if (!db || !collection) { throw ("What is this I don't even (" + this.get('name')) + ")" }
         
         // resolve collection if you only have its name
         if (collection.constructor === String) {
@@ -74,14 +74,13 @@ var DbCollection = Collection.extend4000({
     // you can override this if you want a more complex algo that decides on the right model for the data
     resolveModel: function(data) {
         var model = this.get('model')
-        
         // type is defined? Try to look up more appropriate model
         if (data.type) {
             var differentmodel = undefined
             if (differentmodel = this.get('types')[data.type]) { return differentmodel }
             
             // issue a warning here
-            console.warn("data in " + this.get('name') + " collection has a type defined to " + data.type + " but I couldn't find the appropriate model in my black book of appropriate models (" + this.get('types').join(', ') + ")")
+            console.warn("data in " + this.get('name') + " collection has a type defined to " + data.type + " but I couldn't find the appropriate model in my black book of appropriate models (" + JSON.stringify(_.keys(this.get('types'))) + ")")
         }
         
         return model
@@ -139,11 +138,12 @@ var CollectionExposer = MsgNode.extend4000({
                 accesslevel: 'nobody',
                 name: 'collectionexposer',
                 permissions: {},
-                types: {}
+                types: undefined
               },
 
     initialize: function() {
-        this.lobby.Allow({body: {collection: this.get('model').prototype.defaults.name}})
+        this.set({types: {} })
+        if (this.get('model')) { this.lobby.Allow({body: {collection: this.get('model').prototype.defaults.name}}) }
         this.subscribe({body: {filter: true}}, this.filterMsg.bind(this))
         this.subscribe({body: {create: true}}, this.createMsg.bind(this))
         this.subscribe({body: {update: true}}, this.updateMsg.bind(this))
@@ -167,7 +167,7 @@ var CollectionExposer = MsgNode.extend4000({
         
         var name = undefined
         
-        if (len(args) > 1) { name = args.shift() }        
+        if (args.length > 1) { name = args.shift() }        
         var definition = args.shift()
 
         // so that a remotemodel knows who to contact about its changes
@@ -262,29 +262,22 @@ var CollectionExposer = MsgNode.extend4000({
         var origin = msg.body.origin
         if (!msg.body.limits) { msg.body.limits = {} }
         
-        this.filter(msg.body.filter, msg.body.limits, function(err,cursor) {
-            cursor.each(function(err,entry) {
-                if (!entry) { response.end(); return }
-                entry.id = String(entry._id)
-                delete entry._id
-                var model = self.resolveModel(entry)
-                var instance = new model(entry)
-                response.write(new Msg({o: instance.render(origin)}))
+        
+        this.filterModels(msg.body.filter,function(err,cursor) {
+            cursor.each(function(instance) {
+//                console.log(instance)
+                if (instance.render) {
+                    response.write(new Msg({o: instance.render(origin)}))
+                    //console.log("OK ONE",instance)
+                } else {
+                    console.log("WEIRD ONE", instance)
+                }
             })
         }, msg.body.limits)
-        /*
-
-        this.filtermodels(msg.body.filter, msg.body.limits, function(err,models) {
-            models.each(function(model) {
-                response.write(new Msg({o: model.render(origin)}))
-            })
-         })
-         */
-
     },
 
     updateMsg: function(msg,callback) {
-        var model = this.resolveModel(msg.update)
+        var model = this.resolveModel(msg.body.update)
         var self = this;
         var err;
         if ((err = model.prototype.verifypermissions.apply(this,[msg.body.origin,msg.body.update])) !== false) {
