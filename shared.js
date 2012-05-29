@@ -1,3 +1,4 @@
+exports.debug = false
 
 // converts retarded magical arguments object to an Array object
 function toArray(arg) { return Array.prototype.slice.call(arg); }
@@ -102,6 +103,7 @@ var SubscriptionMan = Backbone.Model.extend4000({
 	        for (var property in pattern) {
                 if ( property == "*" ) { return true; }
 	            if (msg[property] == undefined) { return false; }
+                if (pattern[property] === undefined) { throw "my property '" + property + "' in my matcher is undefined, wtf" }
                 if ((pattern[property].constructor == RegExp) && (msg[property].constructor == String)) { return pattern[property].test(msg[property]) }
 	            if (pattern[property] !== true) { 
                     var atomicTypes = { Number: true, String: true }
@@ -191,13 +193,13 @@ function Response(msg,node,callback) {
     this.node = node
     this.msg = msg 
     this.end = function(data) {
-        this.end = true
+        this.ended = true
         callback(data)
     }
     var self = this;
     this.write = 
         function(reply) { 
-//            if (this.end) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
+            if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
             if (!reply) { return }
             if (!reply.body.queryid) { reply.body.queryid = msg.body.queryid }
             reply.meta = _.extend(reply.meta,msg.meta)
@@ -271,7 +273,7 @@ var MsgNode = Backbone.Model.extend4000(
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
-//            console.log(">>>", this.get('name'), message);
+            if (exports.debug) { console.log(">>>", this.get('name'), message); }
 
             if (!message) { return }
             var self = this
@@ -298,10 +300,10 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
-//            console.log("<<<", this.get('name'), message.body);
+            if (exports.debug) { console.log("<<<", this.get('name'), message.body); }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
-        },
+        }
     });
 
 

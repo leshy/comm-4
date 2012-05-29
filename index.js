@@ -41,7 +41,6 @@ var helpers = require('helpers')
 var expression = fs.readFileSync('node_modules/comm4/shared.js','utf8');
 eval(expression)
 
-
 var DbCollection = Collection.extend4000({
     defaults: { 
         name: 'dbcollection',
@@ -57,12 +56,12 @@ var DbCollection = Collection.extend4000({
         var self = this;
         this.l = this.get('logger')
 
-        if (!db || !collection) { throw ("What is this I don't even (" + this.get('name')) + ")" }
+        if (!db || !collection) { throw ("What is this I don't even (" + this.get('name') + ")" )}
         
         // resolve collection if you only have its name
         if (collection.constructor === String) {
             db.collection(collection, function (err,real_collection) {
-                self.log('general','info','collection "' + collection + '" open.')
+                self.log('db','collection','collection "' + collection + '" open.')
                 self.set({collection: real_collection})
             })
         }
@@ -143,7 +142,17 @@ var CollectionExposer = MsgNode.extend4000({
 
     initialize: function() {
         this.set({types: {} })
-        if (this.get('model')) { this.lobby.Allow({body: {collection: this.get('model').prototype.defaults.name}}) }
+        
+
+        var collectionName = this.get('collection')
+
+        if (collectionName.constructor == Object) { 
+            collectionName = collectionName.collectionName
+        } else if (collectionName.constructor != String) { 
+            throw "wtf is this, my collection is set to a " + typeof(collectionName) + " (" + collectionName + ")"
+        }
+
+        this.lobby.Allow({body: {collection: collectionName}})
         this.subscribe({body: {filter: true}}, this.filterMsg.bind(this))
         this.subscribe({body: {create: true}}, this.createMsg.bind(this))
         this.subscribe({body: {update: true}}, this.updateMsg.bind(this))
@@ -197,7 +206,7 @@ var CollectionExposer = MsgNode.extend4000({
 
         
         // build new model
-        var model = new comm.RemoteModel(definition)
+        var model = RemoteModel.extend4000(definition)
         
         
         // now we need to figure out how to hook it up to the collection
@@ -266,12 +275,9 @@ var CollectionExposer = MsgNode.extend4000({
         this.filterModels(msg.body.filter,function(err,cursor) {
             cursor.each(function(instance) {
 //                console.log(instance)
-                if (instance.render) {
-                    response.write(new Msg({o: instance.render(origin)}))
+                if (!instance) { response.end() }
+                response.write(new Msg({o: instance.render(origin)}))
                     //console.log("OK ONE",instance)
-                } else {
-                    console.log("WEIRD ONE", instance)
-                }
             })
         }, msg.body.limits)
     },
