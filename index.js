@@ -37,8 +37,10 @@ var BSON = require('mongodb').BSONPure
 var fs = require('fs')
 
 var helpers = require('helpers')
+var requirejs = require('requirejs');
 
-var expression = fs.readFileSync('node_modules/comm4/shared.js','utf8');
+
+var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
 var DbCollection = Collection.extend4000({

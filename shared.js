@@ -266,6 +266,7 @@ var MsgNode = Backbone.Model.extend4000(
     {
         initialize: function() {
             // logx('init', this.get('name'), this);
+            this.messages = {}
             this.lobby = new Lobby({master: this});
             this.parents.bind('msg', function(msg) {
                 lobby.MsgIn(msg);
@@ -273,6 +274,9 @@ var MsgNode = Backbone.Model.extend4000(
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
+            if (this.messages[message]) { return }
+            else { this.messages[message] = true }
+
             if (exports.debug) { console.log(">>>", this.get('name'), message); }
 
             if (!message) { return }
