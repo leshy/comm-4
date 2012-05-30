@@ -11,8 +11,6 @@ function cb() {
     if (callback) { callback.apply(this,args) }
 }
 
-
-
 // defaults attribute inheritance, and automatic super.initialize calls
 (function () {
     function extend4000 () {
@@ -142,35 +140,29 @@ var MakeObjReceiver = function(objclass) {
     return function() {
         var args = toArray(arguments);
         var f = args.shift();
+        if (!args.length) { f.apply(this,[]); return }
         if (args[0].constructor != objclass) { args[0] = new objclass(args[0]) }
         return f.apply(this,args)
     }
 }
 
-
 function Msg(data) {
     var self = this;
-    if (data.body) {
-        _.extend(this,data)
-    } else {
-        this.body = data;
-    }
-
-    if (!this.meta) { this.meta = {} }
-
+    this._meta = { id : new Date().getTime()}
+    this._viral = {}
+    _.extend(this,data)
 }
-Msg.prototype.render = function() { return JSON.stringify(this.body) }
 
+Msg.prototype.export = function() { 
+    var data = _.clone(this)    
+    delete data['_viral']
+    delete data['_meta']
+    return data
+}
 
-//
-// specializes subscriptionman to deal with message objects instead of just dictionaryes
-//
-var MsgSubscriptionMan = SubscriptionMan.extend4000({
-    MsgIn: decorate(MakeObjReceiver(Msg), function(msg) {
-        return this._matches(msg.body).map( function(f) { return f(msg); } );
-    })
-});
-
+Msg.prototype.render = function() { 
+    return JSON.stringify(this.export())
+}
 
 // function, arg1...argX, callback
 // callback is passed to a function as a last argument, but
@@ -192,32 +184,46 @@ function maybeCb() {
 function Response(msg,node,callback) { 
     this.node = node
     this.msg = msg 
-    this.end = function(data) {
-        this.ended = true
-        callback(data)
-    }
-    var self = this;
-    this.write = 
-        function(reply) { 
-            if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
-            if (!reply) { return }
-            if (!reply.body.queryid) { reply.body.queryid = msg.body.queryid }
-            reply.meta = _.extend(reply.meta,msg.meta)
-            self.node.MsgOut(reply)
-        }
+    this.callback = callback
+ }
+
+Response.prototype.fixreply = function(msg) {
+    if (!msg) { return }
+    if (!msg.queryid) { msg.queryid = this.msg.queryid }
+    msg._viral = _.extend(msg._viral,this.msg._viral)
+    return msg
 }
+
+Response.prototype.write = decorate(MakeObjReceiver(Msg),function(reply) { 
+    if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
+    if (!reply) { return }
+    this.node.MsgOut(this.fixreply(reply))
+})
+
+
+Response.prototype.end = decorate(MakeObjReceiver(Msg),function(reply) {
+    if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
+    this.ended = true
+    this.callback(this.fixreply(reply))
+})
+
+//
+// specializes subscriptionman to deal with message objects instead of just dictionaryes
+//
+var MsgSubscriptionMan = SubscriptionMan.extend4000({
+    MsgIn: decorate(MakeObjReceiver(Msg), function(msg) {
+        return this._matches(msg.body).map( function(f) { return f(msg); } );
+    })
+});
 
 
 var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
     MsgIn: decorate(MakeObjReceiver(Msg), function(msg,callbackdone) {
         // get a list of functions that care about this message
         var self = this;
-
         var flist = this._matches(msg).map( 
-
             function(f) { return function(callback) { 
                 // function can accept callback OR it can return a reply right away
-
                 var response = new Response(msg,self,callback)
                 f(msg,function(err,responsemsg) { 
                     
@@ -232,7 +238,7 @@ var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
         ); 
         // boooom
         async.parallel(flist,callbackdone)
-    }),
+    })
 });
 
 var Lobby = MsgSubscriptionManAsync.extend4000({ 
@@ -271,13 +277,13 @@ var MsgNode = Backbone.Model.extend4000(
             this.parents.bind('msg', function(msg) {
                 lobby.MsgIn(msg);
             });
+
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
-            if (this.messages[message]) { return }
-            else { this.messages[message] = true }
-
-            if (exports.debug) { console.log(">>>", this.get('name'), message); }
+//            if (this.messages[message]) { console.log('collision'); return }
+//            else { this.messages[message] = true }
+            if (this.debug) { console.log(">>>", this.get('name'), message.render()); }
 
             if (!message) { return }
             var self = this
@@ -304,7 +310,7 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
-            if (exports.debug) { console.log("<<<", this.get('name'), message.body); }
+            if (this.debug) { console.log("<<<", this.get('name'), message.render()) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         }
@@ -320,10 +326,6 @@ var Collection = Backbone.Model.extend4000({
 
     find: function(filter,limis,callback) {
         
-    },  
-
-    findOne: function(filter,callback) {
-        
     }
 })
 
@@ -333,6 +335,7 @@ var RemoteModel = Backbone.Model.extend4000({
     initialize: function() {
         this.changes = {}
         // smarter json diff can be implemented here.
+        if (this.get("_id")) { this.set({ id: String(this.get("_id")) }) }
         if (!this.get("id")) {
             this.changes = _.reduce(_.keys(this.attributes), function(all, key) { all[key] = true; return all }, {})
         }
@@ -400,7 +403,6 @@ var RemoteModel = Backbone.Model.extend4000({
 
         if (id = this.get('id')) { res.id = id }
         return res
-        return JSON.parse(JSON.stringify(res))
     },
 
     remove: function(callback) {
