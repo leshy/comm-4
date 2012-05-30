@@ -112,9 +112,9 @@ var DbCollection = Collection.extend4000({
     }
 })
 
-
 // sweet jesus! this receives mongodb query cursor and collection exposer
 // and creates a fake 'cursor' that returns instances of models instead of just raw data
+// I know what you are thinking, its: sweet jesus!
 var ModelIterator = function(resolveModel,cursor) {
     this.resolveModel = resolveModel
     this.cursor = cursor
@@ -280,7 +280,7 @@ var CollectionExposer = MsgNode.extend4000({
             [
                 function(callback) {
                     mongocursor.count(function(err,data) {
-                        response.write(new Msg({meta: { total: data } }))
+                        response.write(new Msg({totalentries: data }))
                         callback()
                     })
                 },
