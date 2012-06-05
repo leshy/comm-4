@@ -239,6 +239,8 @@ var CollectionExposer = MsgNode.extend4000({
         
         // finally, add the definition of a model to a collectionExposer
         types[name] = model
+
+        return model
     },
 
     filterModels: function(filter,callback,limits) {
