@@ -228,7 +228,7 @@ var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
                 f(msg,function(err,responsemsg) { 
                     
                     if (!responsemsg) { callback(err); return }
-                    if (msg.body.queryid && !responsemsg.body.queryid)  { responsemsg.body.queryid = msg.body.queryid }
+                    if (msg.queryid && !responsemsg.queryid)  { responsemsg.queryid = msg.queryid }
 
                     responsemsg.meta = _.extend(responsemsg.meta,msg.meta)
                     callback(err,responsemsg)
@@ -277,13 +277,14 @@ var MsgNode = Backbone.Model.extend4000(
             this.parents.bind('msg', function(msg) {
                 lobby.MsgIn(msg);
             });
-
         },
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
 //            if (this.messages[message]) { console.log('collision'); return }
 //            else { this.messages[message] = true }
+//            this.debug = true
             if (this.debug) { console.log(">>>", this.get('name'), message.render()); }
+            
 
             if (!message) { return }
             var self = this
@@ -310,6 +311,7 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
+//            this.debug = true
             if (this.debug) { console.log("<<<", this.get('name'), message.render()) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
@@ -374,7 +376,6 @@ var RemoteModel = Backbone.Model.extend4000({
         } else {
             this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback )
         }
-       
         this.changes = {};
     },
 
@@ -406,6 +407,7 @@ var RemoteModel = Backbone.Model.extend4000({
     },
 
     remove: function(callback) {
+        this.trigger('modelremove')
         this.get('owner').MsgIn( new Msg({ origin: "store",  remove: { id: this.get('id') } }), callback )
     },
 
