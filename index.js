@@ -361,7 +361,7 @@ exports.nodes = {}
 
 
 // tcp node, tcp server and client subclass this
-var TcpNode = comm.MsgNode.extend4000({    
+var TcpNode = MsgNode.extend4000({    
     initialize: function() {
         if (!(this.port = this.get('port'))) { throw "I need a port" }
         this.SocketNode = (this.get('protocolNode') || PlainTcpSocket)
@@ -426,7 +426,7 @@ var TcpServerNode = TcpNode.extend4000({
 
 // each tcpnode (tcpserver or client) have socket nodes as their children.
 // socket nodes represent concrete connections, client tcp node has only one socket node as a child
-var PlainTcpSocket = comm.MsgNode.extend4000({    
+var PlainTcpSocket = MsgNode.extend4000({    
 
     initialize: function() {
         var socket
