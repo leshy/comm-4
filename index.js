@@ -41,7 +41,6 @@ var fs = require('fs')
 var helpers = require('helpers')
 var requirejs = require('requirejs');
 
-
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
@@ -344,6 +343,9 @@ var CollectionExposer = MsgNode.extend4000({
 })
 
 
+
+
+
 exports.Msg = Msg
 exports.MsgNode = MsgNode
 exports.RemoteModel = RemoteModel
@@ -351,4 +353,5 @@ exports.DbCollection = DbCollection
 exports.CollectionExposer = CollectionExposer
 exports.MsgSubscriptionManAsync = MsgSubscriptionManAsync
 
+exports.nodes = require('./commnodes')
 

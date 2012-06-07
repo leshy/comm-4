@@ -315,6 +315,10 @@ var MsgNode = Backbone.Model.extend4000(
             if (this.debug) { console.log("<<<", this.get('name'), message.render()) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
+        },
+
+        log: function() {
+            if (this.debug) { console.log(Array.prototype.slice.call(arguments).join(',')) }
         }
     });
 
