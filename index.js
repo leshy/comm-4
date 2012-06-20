@@ -41,17 +41,16 @@ var fs = require('fs')
 var helpers = require('helpers')
 var requirejs = require('requirejs');
 
-var net = require('net')
-
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
+
+
 
 var DbCollection = Collection.extend4000({
     defaults: { 
         name: 'dbcollection',
         db: undefined,
         collection: undefined,
-        model: undefined,
         logger: undefined
     },
 
@@ -73,24 +72,6 @@ var DbCollection = Collection.extend4000({
     },
     
     log: function() { if (this.l) { this.l.log.apply(this.l,arguments) } },
-
-    // receives data from the db and figures out which model should be instantiated
-    // you can override this if you want a more complex algo that decides on the right model for the data
-    resolveModel: function(data) {
-        var model = this.get('model')
-        // type is defined? Try to look up more appropriate model
-        if (data.type) {
-            var differentmodel = undefined
-            if (differentmodel = this.get('types')[data.type]) { return differentmodel }
-            
-            // issue a warning here
-            console.warn("data in " + this.get('name') + " collection has a type defined to " + data.type + " but I couldn't find the appropriate model in my black book of appropriate models (" + JSON.stringify(_.keys(this.get('types'))) + ")")
-        }
-        
-        return model
-    },
-
-    filter: function() { this.find.apply(this,arguments) },
 
     find: function(filter,limits,callback) {
         var self = this;
@@ -137,7 +118,35 @@ ModelIterator.prototype.each = function(callback) {
 }
 
 
-var CollectionExposer = MsgNode.extend4000({
+// CollectionExposers are mixed in with Collection models in order to make them able to answer to messages to create/query/modify the collection models
+
+// LIKE SO:
+/*
+
+        var collection = new (Backbone.Model.extend4000(
+            comm.JsonCollectionExposer, 
+            comm.DbCollection,
+            {
+                defaults: {
+                    name: name + "Collection",
+                    db: env.db, 
+                    collection: name, 
+                    logger: env.l
+                },
+            }))()
+
+*/
+
+
+
+var ModelCollectionExposer = MsgNode.extend4000({
+
+
+})
+
+
+// this one is made for MONGODB collection, but any collection with methods find update and remove that returns JSON will work.
+var JsonCollectionExposer = MsgNode.extend4000({
     defaults: { store: undefined,
                 accesslevel: 'nobody',
                 name: 'collectionexposer',
@@ -182,7 +191,7 @@ var CollectionExposer = MsgNode.extend4000({
         var name = undefined
         
         if (args.length > 1) { name = args.shift() }        
-        var definition = args.shift()
+        var definition = _.last(args)
 
         // so that a remotemodel knows who to contact about its changes
         definition.defaults.owner = this        
@@ -208,10 +217,11 @@ var CollectionExposer = MsgNode.extend4000({
             name = definition.defaults.type
         }
         
+        // build new model
+        
+        var model = RemoteModel.extend4000.apply(RemoteModel,args)
 
         
-        // build new model
-        var model = RemoteModel.extend4000(definition)
         
         // now we need to figure out how to hook it up to the collection        
         var types = this.get('types')
@@ -309,12 +319,15 @@ var CollectionExposer = MsgNode.extend4000({
             callback(err)
             return
         }
+
         if (!msg.select) {
             msg.select = { _id: msg.update.id }
         }
+
         if (msg.select.id) { 
             msg.select._id = msg.select.id; delete msg.select['id'] 
         }        
+
         if (msg.select._id) {
             msg.select._id = new BSON.ObjectID(msg.select._id)
         }
@@ -322,7 +335,6 @@ var CollectionExposer = MsgNode.extend4000({
         this.update(msg.select,msg.update, function(err,data) {
             callback(new Msg({ success: true }))
         })
-
     },
 
     createMsg: function(msg,callback) { 
@@ -346,19 +358,34 @@ var CollectionExposer = MsgNode.extend4000({
 
 
 
-
-
 exports.Msg = Msg
 exports.MsgNode = MsgNode
 exports.RemoteModel = RemoteModel
 exports.DbCollection = DbCollection
-exports.CollectionExposer = CollectionExposer
+exports.JsonCollectionExposer = JsonCollectionExposer
+exports.ModelCollectionExposer = ModelCollectionExposer
 exports.MsgSubscriptionManAsync = MsgSubscriptionManAsync
 
 exports.nodes = {}
 
+/*
+var ConnectionNode = MsgNode.extend4000({
+    queryFilters: function() {
+        
+    },
+
+    receiveFilters: function(filters) {
+        var self = this;
+        _.map(filters, function(filter) {
+            this.lobby.Allow(filter)
+        }.bind(this))
+    }
+})
+
+*/
 
 
+var net = require('net')
 
 // tcp node, tcp server and client subclass this
 var TcpNode = MsgNode.extend4000({    
@@ -376,6 +403,7 @@ var TcpNode = MsgNode.extend4000({
 
 // client and server nodes are almost the same, msg parsing logic is implemented in PlainTcpSocket
 var TcpClientNode = TcpNode.extend4000({
+    defaults: { name: "tcpclientnode", origin: "tcp" },
     initialize: function() {
         this.host = ( this.get('host') || 'localhost' )
     },
@@ -392,33 +420,45 @@ var TcpClientNode = TcpNode.extend4000({
     start: function(callback) {
         try {
             var socket = this.socket = net.connect(this.port,this.host, function() {
-                this.addparent(new this.SocketNode({socket: socket}))
+                this.addparent(new this.SocketNode({socket: socket, id: this.get('name')}))
             }.bind(this));
         } catch(err) {
             callback(true)
         }
 
         socket.on('connect',callback)
+    },
 
+    send: function(msg) {
+        var socket = this.getparent()
+        if (socket) { socket.send(msg) }
     }
 })
 
 var TcpServerNode = TcpNode.extend4000({
-    initialize: function() {
-        this.on('remove',this.stop.bind(this))
-    },
-
+    defaults: { name: "tcpservernode", origin: "tcp" },
+    
     stop: function() {
+        console.log('server stop')
         TcpNode.prototype.stop.apply(this)
         try {
             this.server.close()
         } catch(err) {}
     },
-
+    
     start: function() {
+        var counter = 0;
         this.server = net.createServer(function(socket) {
-            this.addparent(new this.SocketNode({socket: socket}))
+            var id = this.get('name') + " " + counter
+            var socketnode = new this.SocketNode({socket: socket, id: id })
+            this.MsgIn( { tcp: { connect: id } })
+            counter ++
+            this.addparent(socketnode)
         }.bind(this)).listen(this.port)
+
+        this.parents.on('remove',function(parent) {
+            this.MsgIn( { tcp: { disconnect: parent.get('id') } })
+        }.bind(this))
     }
 })
 
@@ -426,7 +466,7 @@ var TcpServerNode = TcpNode.extend4000({
 
 // each tcpnode (tcpserver or client) have socket nodes as their children.
 // socket nodes represent concrete connections, client tcp node has only one socket node as a child
-var PlainTcpSocket = MsgNode.extend4000({    
+var PlainTcpSocket = MsgNode.extend4000({
 
     initialize: function() {
         var socket
@@ -438,7 +478,9 @@ var PlainTcpSocket = MsgNode.extend4000({
         this.onchild(this.bindSocket.bind(this))
 
         this.children.on('remove', function() {
-            if (!this.children.models.length) { this.remove() }
+            if (!this.children.length) { 
+                this.remove() 
+            }
         }.bind(this))
     },
 
@@ -447,24 +489,24 @@ var PlainTcpSocket = MsgNode.extend4000({
     bindSocket: function() {
         var self = this
         var socket = this.socket
-        var maxbuffer = (this.get('maxbuffer') || 255)
+        var maxbuffer = (this.get('maxbuffer') || 10000)
         var buffer = ""
 
         this.on('remove', function() {
-            socket.end()
+            try { socket.end() } catch(err) {}
         })
 
         socket.on('end', function() { this.remove() }.bind(this));
         
         socket.on('data', function(data) {
-            buffer += data.toString('utf8')
+            data = data.toString('utf8')
+            buffer += data
             if (buffer.length > maxbuffer) { 
-                this.log('tcpnode','warning','received too long message from client')
+                this.log('tcpnode','warning','received too long message from client. kicking it out.')
                 this.remove()
                 return
             }
-
-            bufferChanged()
+            bufferChanged(buffer)
 
         }.bind(this))
         
@@ -473,7 +515,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         var id = this.get('id')
 
         // check if new line is received, if so, parse it, and send it out as a message
-        function bufferChanged() {
+        function bufferChanged(buffer) {
             var sbuffer = buffer.split('\n')
             // didn't get a new line?
             if (sbuffer.length < 1) { return }
@@ -494,22 +536,29 @@ var PlainTcpSocket = MsgNode.extend4000({
                 }
 
                 msg.origin = origin
-
                 // this is important, replyes to message will inherit the _viral attribute, 
                 // this socketNode is subscribed to this _viral attribute so that it sends those messages back to the client.
                 msg._viral = { tcp: id } 
-                
-                self.MsgIn(msg)
+//                console.log("MSGIN",msg)
+                self.lobby.MsgIn(msg)
             }
         }
     },
 
-    MsgOut: function(msg) {
+    send: decorate(MakeObjReceiver(Msg), function(msg) {
+        try {
+            this.socket.write(msg.render() + "\n")
+        } catch(err) {
+            console.warn('error writing to socket')
+        }
+    }),
 
-        // sends a new line delimited JSON message BOOOOOM
-        this.socket.write(msg.render() + "\n") 
-        
-    }
+    MsgOut: decorate(MakeObjReceiver(Msg),function(msg) {
+        if ((msg._viral.tcp) && (msg._viral.tcp == this.get('id'))) {
+            // sends a new line delimited JSON message BOOOOOM
+            this.send(msg)
+        }
+    })
 })
 
 
@@ -517,3 +566,4 @@ exports.nodes.TcpNode = TcpNode
 exports.nodes.TcpClientNode = TcpClientNode
 exports.nodes.TcpServerNode = TcpServerNode
 exports.nodes.PlainTcpSocket = PlainTcpSocket
+

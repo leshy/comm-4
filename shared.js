@@ -140,7 +140,7 @@ var MakeObjReceiver = function(objclass) {
     return function() {
         var args = toArray(arguments);
         var f = args.shift();
-        if (!args.length) { f.apply(this,[]); return }
+        if ((!args.length) || (!args[0])) { f.apply(this,[]); return }
         if (args[0].constructor != objclass) { args[0] = new objclass(args[0]) }
         return f.apply(this,args)
     }
@@ -152,6 +152,15 @@ function Msg(data) {
     this._viral = {}
     _.extend(this,data)
 }
+
+// creates an appropriate reply message for this message,
+// (populates _viral, queryid and such)
+Msg.prototype.makereply = decorate(MakeObjReceiver(Msg),function(msg) {
+    if (!msg) { return }
+    if (!msg.queryid) { msg.queryid = this.queryid }
+    msg._viral = _.extend(msg._viral,this._viral)
+    return msg
+})
 
 Msg.prototype.export = function() { 
     var data = _.clone(this)    
@@ -187,24 +196,17 @@ function Response(msg,node,callback) {
     this.callback = callback
  }
 
-Response.prototype.fixreply = function(msg) {
-    if (!msg) { return }
-    if (!msg.queryid) { msg.queryid = this.msg.queryid }
-    msg._viral = _.extend(msg._viral,this.msg._viral)
-    return msg
-}
-
 Response.prototype.write = decorate(MakeObjReceiver(Msg),function(reply) { 
     if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
     if (!reply) { return }
-    this.node.MsgOut(this.fixreply(reply))
+    this.node.MsgOut(this.msg.makereply(reply))
 })
 
 
 Response.prototype.end = decorate(MakeObjReceiver(Msg),function(reply) {
     if (this.ended) { throw "Attempted to write to ended response " + JSON.stringify(reply) }
     this.ended = true
-    this.callback(this.fixreply(reply))
+    this.callback(this.msg.makereply(reply))
 })
 
 //
@@ -226,28 +228,29 @@ var MsgSubscriptionManAsync = SubscriptionMan.extend4000({
                 // function can accept callback OR it can return a reply right away
                 var response = new Response(msg,self,callback)
                 f(msg,function(err,responsemsg) { 
-                    
-                    if (!responsemsg) { callback(err); return }
-                    if (msg.queryid && !responsemsg.queryid)  { responsemsg.queryid = msg.queryid }
 
-                    responsemsg.meta = _.extend(responsemsg.meta,msg.meta)
-                    callback(err,responsemsg)
+                    if (!responsemsg) { callback(err); return }
+                    callback(err,msg.makereply(responsemsg))
                 },response)
             }}
-
-        ); 
+        );
         // boooom
-        async.parallel(flist,callbackdone)
+        async.parallel(flist,function() {
+            //console.log(arguments)
+            callbackdone.apply(this,arguments)
+        })
     })
 });
 
 var Lobby = MsgSubscriptionManAsync.extend4000({ 
     defaults: {name: 'lobby'},
+
     initialize: function() {
         var master = this.get('master')
         this.MsgIn = function(msg,callback) { return master.MsgIn(msg,callback) }
          
     },
+
     Allow: function(pattern) {
         delete this.MsgIn
         var master = this.get('master');
@@ -255,17 +258,20 @@ var Lobby = MsgSubscriptionManAsync.extend4000({
             return master.MsgIn(msg,callback) 
         });
     },
+
     Close: function() {
         this.subscriptions = []
     },
+  
     Disallow: function() { }
+
 });
+
 
 //
 // this is the main part of clientside message dispatch system.
 // MsgNodes are chained and pass messages thorugh each other until the last parent kicks them out into the world.
 //
-
 var MsgNode = Backbone.Model.extend4000(
     graph.GraphNode,
     MsgSubscriptionManAsync,
@@ -278,12 +284,20 @@ var MsgNode = Backbone.Model.extend4000(
                 lobby.MsgIn(msg);
             });
         },
+        
+        /*
+        queryFilters: function() {
+            _.map(this.lobby.subscriptions, function(subscription) {
+                return subscription.pattern
+            })
+        },
+        */        
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
 //            if (this.messages[message]) { console.log('collision'); return }
 //            else { this.messages[message] = true }
 //            this.debug = true
-            if (this.debug) { console.log(">>>", this.get('name'), message.render()); }
+            if (this.debug) { console.log(">>>", this.get('name'), message); }
             
 
             if (!message) { return }
@@ -312,7 +326,7 @@ var MsgNode = Backbone.Model.extend4000(
         
         MsgOut: function(message) {
 //            this.debug = true
-            if (this.debug) { console.log("<<<", this.get('name'), message.render()) }
+            if (this.debug) { console.log("<<<", this.get('name'), message) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         },
@@ -324,16 +338,44 @@ var MsgNode = Backbone.Model.extend4000(
 
 
 var Collection = Backbone.Model.extend4000({
-    defaults: {
-        defaultfilter: undefined,
-        absolutefilter: undefined,
-        findby: "_id"
+    defaults: { 
+        name: 'collection',
+        model: undefined,
     },
+
+    filter: function() { this.find.apply(this,arguments) },
 
     find: function(filter,limis,callback) {
         
+    },
+
+    create: function(data,callback) {},
+    
+    remove: function(data,callback) {},
+    
+    update: function(select,data,callback) {},
+
+
+    // receives data from the db and figures out which model should be instantiated
+    // you can override this if you want a more complex algo that decides on the right model for the data
+    resolveModel: function(data) {
+        var model = this.get('model')
+        // type is defined? Try to look up more appropriate model
+        if (data.type) {
+            var differentmodel = undefined
+            if (differentmodel = this.get('types')[data.type]) { return differentmodel }
+            
+            // issue a warning here
+            console.warn("data in " + this.get('name') + " collection has a type defined to " + data.type + " but I couldn't find the appropriate model in my black book of appropriate models (" + JSON.stringify(_.keys(this.get('types'))) + ")")
+        }
+        
+        return model
     }
 })
+
+
+
+
 
 
 
