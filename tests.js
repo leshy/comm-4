@@ -21,6 +21,7 @@ exports.internalComm = function(test){
     test.done()
 };
 
+
 // spawn server and client, connect them and spark an interesting conversation.
 exports.tcpComm = function(test) {
 
@@ -35,11 +36,8 @@ exports.tcpComm = function(test) {
     var client = new comm.nodes.TcpClientNode({port: 8888, name:'testclient'})
 //    client.debug = true
 
-
-
     server.subscribe({"test" : true}, function(msg,callback,reply) { 
         reply.write({serverreply: 333})
-//        reply.end({serverreply: 333})
         callback(undefined,new comm.Msg({serverreply:'done'}))
     })
     
@@ -60,7 +58,10 @@ exports.tcpComm = function(test) {
         // send two messages
         client.send(new comm.Msg({bla: true, lala: 22}))
         client.send(new comm.Msg({test: { a : 'x', b: 3} , lalala: 22}))
-    })    
+        //client.send(new comm.Msg({howmanytimeswillthisrepeat: 4148} ))
+        //client.send(new comm.Msg({howmanytimeswillthisrepeat: 414} ))
+
+    })
 }
 
 
