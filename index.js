@@ -44,6 +44,7 @@ var requirejs = require('requirejs');
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
+
 exports.reference = {}
 
 var DbCollection = Collection.extend4000({
@@ -700,4 +701,8 @@ exports.nodes.TcpNode = TcpNode
 exports.nodes.TcpClientNode = TcpClientNode
 exports.nodes.TcpServerNode = TcpServerNode
 exports.nodes.PlainTcpSocket = PlainTcpSocket
+
+
+
+
 

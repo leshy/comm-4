@@ -1,3 +1,6 @@
+
+
+
 // converts retarded magical arguments object to an Array object
 function toArray(arg) { return Array.prototype.slice.call(arg); }
 
@@ -242,7 +245,7 @@ var Lobby = MsgSubscriptionManAsync.extend4000({
 
     initialize: function() {
         var master = this.get('master')
-        this.MsgIn = function(msg,callback) { return master.MsgIn(msg,callback) }         
+        this.MsgIn = function(msg,callback) { return master.MsgIn(msg,callback) }
     },
 
     Allow: function(pattern) {
@@ -262,12 +265,14 @@ var Lobby = MsgSubscriptionManAsync.extend4000({
 });
 
 
-//
+
+
+
 // this is the main part of clientside message dispatch system.
 // MsgNodes are chained and pass messages thorugh each other until the last parent kicks them out into the world.
 //
 var MsgNode = Backbone.Model.extend4000(
-    graph.GraphNode,
+    graph.DirectedGraphNode,
     MsgSubscriptionManAsync,
     {
         initialize: function() {
@@ -292,7 +297,7 @@ var MsgNode = Backbone.Model.extend4000(
 //            else { this.messages[message] = true }
             //this.debug = true
             
-            if (this.debug) { console.log(">>>", this.get('name'), message.render()); }
+            if (this.debug) { console.log(">>>", this.get('name'), message); }
             
             if (!message) { return }
             var self = this
@@ -308,9 +313,10 @@ var MsgNode = Backbone.Model.extend4000(
                     data = _.flatten(data)
                     data = _.filter(data, function(entry) { return Boolean(entry) })
                     
-                    //if (data.length != 0) { _.map(data, function(msg) { self.MsgOut(msg) }) }
+                    console.log(data)
+
+                    if (data.length != 0) { console.log('yes'); _.map(data, function(msg) { console.log('msgout!'); self.MsgOut(msg) })  } else { console.log('no')}
                     if (data.length == 1) { data = _.first(data) }
-                    
                     if (callback) { callback(err,data) }
                 })
         }),
@@ -321,7 +327,7 @@ var MsgNode = Backbone.Model.extend4000(
         
         MsgOut: function(message) {
 //           this.debug = true
-            if (this.debug) { console.log("<<<", this.get('name'), message.render()) }
+            if (this.debug) { console.log("<<<", this.get('name'), message) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         },
@@ -465,3 +471,6 @@ var RemoteModel = Backbone.Model.extend4000({
         
     }
 })
+
+
+

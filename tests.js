@@ -1,6 +1,6 @@
 var fs = require('fs')
 var comm = require('./index.js')
-
+/*
 exports.internalComm = function(test){
     var a = new comm.MsgNode()
     var b = new comm.MsgNode()
@@ -20,7 +20,6 @@ exports.internalComm = function(test){
     
     test.done()
 };
-
 
 // spawn server and client, connect them and spark an interesting conversation.
 exports.tcpComm = function(test) {
@@ -64,4 +63,30 @@ exports.tcpComm = function(test) {
     })
 }
 
+*/
+
+
+
+
+exports.sending = function(test){
+    var a = new comm.MsgNode({name:'a'})
+    var b = new comm.MsgNode({name:'b'})
+    a.debug = true
+    b.debug = true
+    a.addparent(b)
+
+    var data = []
+
+    a.lobby.Allow({'test': true})
+    b.lobby.Allow({'*': true})
+    
+    b.MsgIn( {test: { a : 'x', b: 3 } , lalala: 22 } )
+    
+    a.subscribe({"*" : true}, function(msg,callback,reply) { 
+        //reply.write({blalal: 15125})
+        callback(undefined,{ lalala : 666 })
+    })
+
+
+}
 
