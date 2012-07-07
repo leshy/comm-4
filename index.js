@@ -229,7 +229,7 @@ var JsonCollectionExposer = MsgNode.extend4000({
         // this collection has only one model for now, just save it as a model attribute
         if (!(_.keys(types).length) && !(this.get('model'))) { 
             this.set({model : model})
-            return
+            return model
         }
         
         // we have more then one model
@@ -426,7 +426,7 @@ var TcpClientNode = TcpNode.extend4000({
             callback(true)
         }
 
-        socket.on('connect',callback)
+        socket.on('connect', callback)
     },
 
     send: function(msg) {
@@ -463,7 +463,6 @@ var TcpServerNode = TcpNode.extend4000({
 })
 
 
-
 // each tcpnode (tcpserver or client) have socket nodes as their children.
 // socket nodes represent concrete connections, client tcp node has only one socket node as a child
 var PlainTcpSocket = MsgNode.extend4000({
@@ -490,23 +489,24 @@ var PlainTcpSocket = MsgNode.extend4000({
         var self = this
         var socket = this.socket
         var maxbuffer = (this.get('maxbuffer') || 10000)
-        var buffer = ""
+        buffer = ""
 
         this.on('remove', function() {
             try { socket.end() } catch(err) {}
         })
 
-        socket.on('end', function() { this.remove() }.bind(this));
+        socket.on('end', function() { this.trigger('disconnect'); this.remove() }.bind(this));
         
         socket.on('data', function(data) {
             data = data.toString('utf8')
+            console.log("RECV",data)
             buffer += data
             if (buffer.length > maxbuffer) { 
                 this.log('tcpnode','warning','received too long message from client. kicking it out.')
                 this.remove()
                 return
             }
-            bufferChanged(buffer)
+            bufferChanged()
 
         }.bind(this))
         
@@ -515,7 +515,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         var id = this.get('id')
 
         // check if new line is received, if so, parse it, and send it out as a message
-        function bufferChanged(buffer) {
+        function bufferChanged() {
             var sbuffer = buffer.split('\n')
             // didn't get a new line?
             if (sbuffer.length < 1) { return }
@@ -528,17 +528,18 @@ var PlainTcpSocket = MsgNode.extend4000({
                 
                 try {
                     var msg = new Msg(JSON.parse(msgJSON))
-                }   
+                }
+                
                 catch(err) {
                     self.log('tcpnode','warning','received invalid JSON from client (' + err + ')')
                     self.remove()
                     return
                 }
-
+                
                 msg.origin = origin
                 // this is important, replyes to message will inherit the _viral attribute, 
                 // this socketNode is subscribed to this _viral attribute so that it sends those messages back to the client.
-                msg._viral = { tcp: id } 
+                msg._viral = { tcp: id, node: self }
 //                console.log("MSGIN",msg)
                 self.lobby.MsgIn(msg)
             }
@@ -547,7 +548,11 @@ var PlainTcpSocket = MsgNode.extend4000({
 
     send: decorate(MakeObjReceiver(Msg), function(msg) {
         try {
-            this.socket.write(msg.render() + "\n")
+            var rendered 
+            if ((rendered = msg.render()) != "{}") {
+                console.log("SEND",rendered)
+                this.socket.write(rendered + "\n")
+            }
         } catch(err) {
             console.warn('error writing to socket')
         }
@@ -560,7 +565,6 @@ var PlainTcpSocket = MsgNode.extend4000({
         }
     })
 })
-
 
 exports.nodes.TcpNode = TcpNode
 exports.nodes.TcpClientNode = TcpClientNode

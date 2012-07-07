@@ -294,9 +294,10 @@ var MsgNode = Backbone.Model.extend4000(
         */        
 
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
+//            if (this.messages[message.id]) { callback() } else { this.messages[message.id] = message }
 //            if (this.messages[message]) { console.log('collision'); return }
 //            else { this.messages[message] = true }
-//            this.debug = true
+            this.debug = true
             if (this.debug) { console.log(">>>", this.get('name'), message); }
             
 
@@ -307,16 +308,22 @@ var MsgNode = Backbone.Model.extend4000(
                 this.children.map(function(child) { 
                     return function(callback) { child.lobby.MsgIn(message,callback) }
                 }).concat(
-                    function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,callback]) }
+                    function(callback) { MsgSubscriptionManAsync.prototype.MsgIn.apply(self,[message,function(err,data) {
+                        if (data.length) { self.MsgOut(_.first(data)) }
+                        callback(err,data)
+                    }]) }
                 ),
                 function(err,data) {
                     data = _.flatten(data)
                     data = _.filter(data, function(entry) { return Boolean(entry) })
-                    if (data.length == 0) { data = undefined } else 
-                    {
-                        _.map(data, function(msg) { self.MsgOut(msg) })
+                    //if (data.length != 0) { _.map(data, function(msg) { self.MsgOut(msg) }) }
+
+                    if (data.length == 0) { data = undefined }  else {
+                        data = data[0] 
                     }
-                    if (callback) { callback(err) }
+                    
+                    if (callback) { callback(err,data) }
+
                 })
         }),
 
@@ -325,7 +332,7 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
-//            this.debug = true
+            this.debug = true
             if (this.debug) { console.log("<<<", this.get('name'), message) }
             if (!message) { return }
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
@@ -377,8 +384,6 @@ var Collection = Backbone.Model.extend4000({
 
 
 
-
-
 var RemoteModel = Backbone.Model.extend4000({
     initialize: function() {
         this.changes = {}
@@ -418,9 +423,9 @@ var RemoteModel = Backbone.Model.extend4000({
 
         if (!data.id) {
             this.trigger('create')
-            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), callback)
+            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), function(err,msg) { this.set({id: msg.created}), callback(err,msg) }.bind(this) )
         } else {
-            this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback )
+            this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback)
         }
         this.changes = {};
     },
