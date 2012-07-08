@@ -90,7 +90,7 @@ var SubscriptionMan = Backbone.Model.extend4000({
     oneshot: function(msg,f) {
         var self = this;
         function ff() {
-            self.unsubscribe(ff); f.apply(this,attributes);
+            self.unsubscribe(ff); f.apply(this,arguments);
         }
         this.subscribe(msg, ff,ff );
         return function() { self.unsubscribe(ff); };
@@ -296,12 +296,14 @@ var MsgNode = Backbone.Model.extend4000(
         MsgIn: decorate(MakeObjReceiver(Msg),function(message,callback) {
 //            if (this.messages[message.id]) { callback() } else { this.messages[message.id] = message }
 //            if (this.messages[message]) { console.log('collision'); return }
-//            else { this.messages[message] = true }
-            this.debug = true
-            if (this.debug) { console.log(">>>", this.get('name'), message); }
-            
+//            else { this.messages[message] = true }            
 
             if (!message) { return }
+
+            this.debug = true
+            if (this.debug) { console.log(">>>", this.get('name'), message.render() )}
+
+
             var self = this
 
             async.parallel(
@@ -323,7 +325,6 @@ var MsgNode = Backbone.Model.extend4000(
                     }
                     
                     if (callback) { callback(err,data) }
-
                 })
         }),
 
@@ -332,9 +333,11 @@ var MsgNode = Backbone.Model.extend4000(
         }),
         
         MsgOut: function(message) {
-            this.debug = true
-            if (this.debug) { console.log("<<<", this.get('name'), message) }
             if (!message) { return }
+
+            this.debug = true
+            if (this.debug) { console.log("<<<", this.get('name'), message.render())}
+
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
         },
 
@@ -478,3 +481,4 @@ var RemoteModel = Backbone.Model.extend4000({
         
     }
 })
+

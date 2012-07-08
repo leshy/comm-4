@@ -44,8 +44,7 @@ var requirejs = require('requirejs');
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
-
-
+// --------------------------------------------- SNIP
 var DbCollection = Collection.extend4000({
     defaults: { 
         name: 'dbcollection',
@@ -116,6 +115,41 @@ ModelIterator.prototype.each = function(callback) {
         callback(instance)
     })
 }
+
+
+ModelIterator.prototype.toArray = function (callback) { 
+    var self = this;
+    this.cursor.toArray(function (err,data) {
+        if (err) { callback(err) ; return }
+        
+        callback(undefined, _.map(data, function (entry) { 
+            var model = self.resolveModel(data)
+            return new model(entry)
+        }))
+    })
+}
+
+
+ModelIterator.prototype.next = function(callback) {
+    var self = this
+    this.cursor.nextObject(function(err,data) {
+        if (!data) { callback();return }
+        var model = self.resolveModel(data)
+        var instance = new model(data)
+        callback(err,instance)
+    })
+}
+
+/* this is cute but not so easy to understand. written the passthroughs by hand.
+var passThrough decorate(decorators.MultiArg, function (name) {
+    ModelIterator.prototype[name] = function () { this.cursor[name].apply(this.cursor,arguments) }    
+})
+
+passThrough('skip','count')
+*/
+
+ModelIterator.prototype.skip = function () { this.cursor.skip.apply(this.cursor,arguments) }
+ModelIterator.prototype.count = function () { this.cursor.count.apply(this.cursor,arguments) }
 
 
 // CollectionExposers are mixed in with Collection models in order to make them able to answer to messages to create/query/modify the collection models
@@ -263,7 +297,6 @@ var JsonCollectionExposer = MsgNode.extend4000({
             callback(err, new ModelIterator(self.resolveModel.bind(self),cursor), cursor)
         })
     },
-
     
     removeMsg: function(msg,callback) {
         // this should be abstracted, filtermsg, and updatemsg use the same thing
@@ -324,11 +357,15 @@ var JsonCollectionExposer = MsgNode.extend4000({
             msg.select = { _id: msg.update.id }
         }
 
+        if (msg.update.id) {
+            delete msg.update['id']
+        }
+
         if (msg.select.id) { 
             msg.select._id = msg.select.id; delete msg.select['id'] 
         }        
 
-        if (msg.select._id) {
+        if (msg.select._id && (msg.select._id.constructor == String)) {
             msg.select._id = new BSON.ObjectID(msg.select._id)
         }
 
@@ -406,6 +443,9 @@ var TcpClientNode = TcpNode.extend4000({
     defaults: { name: "tcpclientnode", origin: "tcp" },
     initialize: function() {
         this.host = ( this.get('host') || 'localhost' )
+
+        this.children.on('remove', function () { console.log('removechild' )})
+        this.parents.on('remove', function () { console.log('removeparent' )})
     },
 
     stop: function() {
@@ -478,7 +518,8 @@ var PlainTcpSocket = MsgNode.extend4000({
 
         this.children.on('remove', function() {
             if (!this.children.length) { 
-                this.remove() 
+                console.log('I have no children anymore, dying')
+                this.del()
             }
         }.bind(this))
     },
@@ -491,19 +532,20 @@ var PlainTcpSocket = MsgNode.extend4000({
         var maxbuffer = (this.get('maxbuffer') || 10000)
         buffer = ""
 
-        this.on('remove', function() {
+        this.on('del', function() {
+            console.log('del called, ending socket!')
             try { socket.end() } catch(err) {}
         })
 
-        socket.on('end', function() { this.trigger('disconnect'); this.remove() }.bind(this));
+        socket.on('end', function() { this.trigger('disconnect'); this.del() }.bind(this));
         
         socket.on('data', function(data) {
             data = data.toString('utf8')
-            console.log("RECV",data)
+//            console.log("RECV",data)
             buffer += data
             if (buffer.length > maxbuffer) { 
                 this.log('tcpnode','warning','received too long message from client. kicking it out.')
-                this.remove()
+                this.del()
                 return
             }
             bufferChanged()
@@ -550,7 +592,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         try {
             var rendered 
             if ((rendered = msg.render()) != "{}") {
-                console.log("SEND",rendered)
+        //        console.log("SEND",rendered)
                 this.socket.write(rendered + "\n")
             }
         } catch(err) {
@@ -562,7 +604,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         if ((msg._viral.tcp) && (msg._viral.tcp == this.get('id'))) {
             // sends a new line delimited JSON message BOOOOOM
             this.send(msg)
-        }
+        } else { console.log('message ignored', this.get('id'))}
     })
 })
 
