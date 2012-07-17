@@ -300,7 +300,7 @@ var MsgNode = Backbone.Model.extend4000(
 
             if (!message) { return }
 
-            this.debug = true
+//            this.debug = true
             if (this.debug) { console.log(">>>", this.get('name'), message.render() )}
 
 
@@ -335,7 +335,7 @@ var MsgNode = Backbone.Model.extend4000(
         MsgOut: function(message) {
             if (!message) { return }
 
-            this.debug = true
+            //this.debug = true
             if (this.debug) { console.log("<<<", this.get('name'), message.render())}
 
             return _.flatten(this.parents.map(function(parent) { parent.MsgOut(message); }));
@@ -371,6 +371,8 @@ var Collection = Backbone.Model.extend4000({
     resolveModel: function(data) {
         var model = this.get('model')
         // type is defined? Try to look up more appropriate model
+        //console.log(data)
+        //console.log(_.keys(this.get('types')))
         if (data.type) {
             var differentmodel = undefined
             if (differentmodel = this.get('types')[data.type]) { return differentmodel }
@@ -384,9 +386,6 @@ var Collection = Backbone.Model.extend4000({
 })
 
 
-
-
-
 var RemoteModel = Backbone.Model.extend4000({
     initialize: function() {
         this.changes = {}
@@ -395,7 +394,7 @@ var RemoteModel = Backbone.Model.extend4000({
         if (!this.get("id")) {
             this.changes = _.reduce(_.keys(this.attributes), function(all, key) { all[key] = true; return all }, {})
         }
-        this.bind('change',function(model,change) {
+        this.bind('change',function(model,change,next) {
             _.extend(this.changes,change.changes)
         }.bind(this))
     },

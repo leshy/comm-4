@@ -318,7 +318,6 @@ var JsonCollectionExposer = MsgNode.extend4000({
         var self = this;
         var origin = msg.origin
         if (!msg.limits) { msg.limits = {} }
-        console.log('filtermsg!')
         
         this.filterModels(msg.filter,function(err,cursor,mongocursor) {
 
@@ -345,29 +344,44 @@ var JsonCollectionExposer = MsgNode.extend4000({
     },
 
     updateMsg: function(msg,callback) {
-        var model = this.resolveModel(msg.update)
         var self = this;
+        /*
+        var model = this.resolveModel(msg.update)
         var err;
+        if (!model) { throw "didn't get anything from resolvemodel function" }
         if ((err = model.prototype.verifypermissions.apply(this,[msg.origin,msg.update])) !== false) {
             callback(err)
             return
         }
-
+        */        
         if (!msg.select) {
             msg.select = { _id: msg.update.id }
         }
-
+        
         if (msg.update.id) {
             delete msg.update['id']
         }
-
+        
         if (msg.select.id) { 
             msg.select._id = msg.select.id; delete msg.select['id'] 
         }        
-
+        
         if (msg.select._id && (msg.select._id.constructor == String)) {
             msg.select._id = new BSON.ObjectID(msg.select._id)
         }
+        
+        console.log('updatemsg',msg.select,msg.update)
+
+        // call hooks on models
+        this.filterModels(msg.select,function (err,cursor,mongocursor) {  
+            cursor.each(function (instance) {
+                if (!instance) { return }
+//                var previous = {}
+//                _.map(msg.update,function (value,key) { previous[key] = instance.attributes[key] })
+                instance.set(msg.update)
+                instance.trigger('dbupdate',instance,{changes: msg.update})
+            })
+        })
 
         this.update(msg.select,msg.update, function(err,data) {
             callback(new Msg({ success: true }))
@@ -604,7 +618,9 @@ var PlainTcpSocket = MsgNode.extend4000({
         if ((msg._viral.tcp) && (msg._viral.tcp == this.get('id'))) {
             // sends a new line delimited JSON message BOOOOOM
             this.send(msg)
-        } else { console.log('message ignored', this.get('id'))}
+        } else { 
+            //console.log('message ignored', this.get('id'))
+        }
     })
 })
 
