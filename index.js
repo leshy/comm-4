@@ -44,9 +44,7 @@ var requirejs = require('requirejs');
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
-
-exports.reference = {}
-
+// --------------------------------------------- SNIP
 var DbCollection = Collection.extend4000({
     defaults: { 
         name: 'dbcollection',
@@ -82,7 +80,7 @@ var DbCollection = Collection.extend4000({
     
     create: function(data,callback) { 
         var model = this.get('model')
-        //console.log("db create", data)
+        console.log("db create", data)
         this.get('collection').insert(data,callback)
     },
 
@@ -112,28 +110,47 @@ ModelIterator.prototype.each = function(callback) {
     var self = this
     this.cursor.each(function(err,data) {
         if (!data) { callback(undefined); return }
-        if (data._id) { data.id = data._id; delete data._id }
         var model = self.resolveModel(data)
         var instance = new model(data)
         callback(instance)
     })
 }
 
-ModelIterator.prototype.toArray = function(callback) {
-    var self = this
-    this.cursor.toArray(function(err,data) {
-        if (err) { callback(err); return }
-        var array = _.map(data,function (err,data) {  
-            if (!data) { return }
-            if (data._id) { data.id = data._id; delete data._id }
+
+ModelIterator.prototype.toArray = function (callback) { 
+    var self = this;
+    this.cursor.toArray(function (err,data) {
+        if (err) { callback(err) ; return }
+        
+        callback(undefined, _.map(data, function (entry) { 
             var model = self.resolveModel(data)
-            var instance = new model(data)
-            return instance
-        })
-        array.pop()
-        callback(err, array)
+            return new model(entry)
+        }))
     })
 }
+
+
+ModelIterator.prototype.next = function(callback) {
+    var self = this
+    this.cursor.nextObject(function(err,data) {
+        if (!data) { callback();return }
+        var model = self.resolveModel(data)
+        var instance = new model(data)
+        callback(err,instance)
+    })
+}
+
+/* this is cute but not so easy to understand. written the passthroughs by hand.
+var passThrough decorate(decorators.MultiArg, function (name) {
+    ModelIterator.prototype[name] = function () { this.cursor[name].apply(this.cursor,arguments) }    
+})
+
+passThrough('skip','count')
+*/
+
+ModelIterator.prototype.skip = function () { this.cursor.skip.apply(this.cursor,arguments) }
+ModelIterator.prototype.count = function () { this.cursor.count.apply(this.cursor,arguments) }
+
 
 // CollectionExposers are mixed in with Collection models in order to make them able to answer to messages to create/query/modify the collection models
 
@@ -157,123 +174,8 @@ ModelIterator.prototype.toArray = function(callback) {
 
 
 var ModelCollectionExposer = MsgNode.extend4000({
-    defaults: { store: undefined,
-                name: 'inmemorycollectionexposer',
-              },
-
-    initialize: function () { 
 
 
-        this.lobby.Allow({collection: this.get('name')})
-        this.subscribe({filter: true}, this.filterMsg.bind(this))
-        this.subscribe({create: true}, this.createMsg.bind(this))
-        this.subscribe({update: true}, this.updateMsg.bind(this))
-        this.subscribe({remove: true}, this.removeMsg.bind(this))
-    },
-
-
-    _match: function (model,filter) { 
-        
-    },
-    
-    filter: function(filter,callback) {
-        var self = this
-        callback(undefined,this.get('store').filter(function (model) { return self._match(filter,model) }))
-    },
-
-    remove: function(filter,callback) {
-        var self = this
-        this.store.map(function (model) { 
-            if (self._match(filter,model)) { self.store.remove(model) }
-        })
-        callback()
-    },
-
-    add: function(model,callback) {
-        var self = this
-        this.store.map(function (model) { 
-            if (self._match(filter,model)) { self.store.remove(model) }
-        })
-    },
-    
-    removeMsg: function(msg,callback) {
-        this.remove(msg.remove, function(err,res) {
-            callback()
-        })
-    },
-    
-    filterMsg: function(msg,callback,response) { 
-        var self = this;
-        var origin = msg.origin
-        if (!msg.limits) { msg.limits = {} }
-        
-        this.filterModels(msg.filter,function(err,cursor,mongocursor) {
-
-            async.series(
-            [
-                function(callback) {
-                    mongocursor.count(function(err,data) {
-                        response.write(new Msg({totalentries: data }))
-                        callback()
-                    })
-                },
-                
-                function(callback) {
-                    cursor.each(function(instance) {
-                        if (!instance) { callback(); return }
-                        response.write({o: instance.render(origin) })
-                    })}
-            ],
-                function() {
-                    response.end()
-                })
-            
-        },msg.limits )
-    },
-
-    updateMsg: function(msg,callback) {
-        var model = this.resolveModel(msg.update)
-        var self = this;
-        var err;
-        if ((err = model.prototype.verifypermissions.apply(this,[msg.origin,msg.update])) !== false) {
-            callback(err)
-            return
-        }
-
-        if (!msg.select) {
-            msg.select = { _id: msg.update.id }
-        }
-
-        if (msg.select.id) { 
-            msg.select._id = msg.select.id; delete msg.select['id'] 
-        }        
-
-        if (msg.select._id) {
-            msg.select._id = new BSON.ObjectID(msg.select._id)
-        }
-
-        this.update(msg.select,msg.update, function(err,data) {
-            callback(new Msg({ success: true }))
-        })
-    },
-
-    createMsg: function(msg,callback) { 
-        var model = this.resolveModel(msg.create)
-        var err;
-        if ((err = model.prototype.verifypermissions.apply(this,[msg.origin,msg.create])) !== false) {
-            callback(err)
-            return
-        }
-
-        var instance = new model(msg.create)
-        instance.trigger('precreate')
-        // this feels a bit upside down, maybe instance.flush should be called here?
-        // also, maybe accept instance as O in messages
-        this.create(instance.render('store'),function(err,data) { 
-            instance.trigger('create')
-            callback(err,new Msg({created:data[0]._id}))
-        })
-    }
 })
 
 
@@ -283,11 +185,13 @@ var JsonCollectionExposer = MsgNode.extend4000({
                 accesslevel: 'nobody',
                 name: 'collectionexposer',
                 permissions: {},
-                types: undefined },
-    
+                types: undefined
+              },
+
     initialize: function() {
         this.set({types: {} })
         
+
         var collectionName = this.get('collection')
 
         if (collectionName.constructor == Object) { 
@@ -317,7 +221,7 @@ var JsonCollectionExposer = MsgNode.extend4000({
     // 
     defineModel: function() {
         var args = helpers.toArray(arguments)
-
+        
         var name = undefined
         
         if (args.length > 1) { name = args.shift() }        
@@ -347,8 +251,11 @@ var JsonCollectionExposer = MsgNode.extend4000({
             name = definition.defaults.type
         }
         
-        // build new model        
+        // build new model
+        
         var model = RemoteModel.extend4000.apply(RemoteModel,args)
+
+        
         
         // now we need to figure out how to hook it up to the collection        
         var types = this.get('types')
@@ -372,7 +279,7 @@ var JsonCollectionExposer = MsgNode.extend4000({
         if (!(_.keys(types).length) && (this.get('model'))) { 
             var oldmodel = this.get('model')
             oldmodel.prototype.defaults.permissions.store.type = 1
-            types[oldmodel.prototype.defaults.type] = oldmodel
+            //types[oldmodel.prototype.defaults.type] = oldmodel
         }
         
         // finally, add the definition of a model to a collectionExposer
@@ -390,7 +297,6 @@ var JsonCollectionExposer = MsgNode.extend4000({
             callback(err, new ModelIterator(self.resolveModel.bind(self),cursor), cursor)
         })
     },
-
     
     removeMsg: function(msg,callback) {
         // this should be abstracted, filtermsg, and updatemsg use the same thing
@@ -437,30 +343,45 @@ var JsonCollectionExposer = MsgNode.extend4000({
         },msg.limits )
     },
 
-    _makeid: function (id) { 
-        
-    },
-
     updateMsg: function(msg,callback) {
-        var model = this.resolveModel(msg.update)
         var self = this;
+        /*
+        var model = this.resolveModel(msg.update)
         var err;
+        if (!model) { throw "didn't get anything from resolvemodel function" }
         if ((err = model.prototype.verifypermissions.apply(this,[msg.origin,msg.update])) !== false) {
             callback(err)
             return
         }
-
+        */        
         if (!msg.select) {
             msg.select = { _id: msg.update.id }
         }
-
+        
+        if (msg.update.id) {
+            delete msg.update['id']
+        }
+        
         if (msg.select.id) { 
             msg.select._id = msg.select.id; delete msg.select['id'] 
         }        
-
+        
         if (msg.select._id && (msg.select._id.constructor == String)) {
-                msg.select._id = new BSON.ObjectID(msg.select._id)
+            msg.select._id = new BSON.ObjectID(msg.select._id)
         }
+        
+        console.log('updatemsg',msg.select,msg.update)
+
+        // call hooks on models
+        this.filterModels(msg.select,function (err,cursor,mongocursor) {  
+            cursor.each(function (instance) {
+                if (!instance) { return }
+//                var previous = {}
+//                _.map(msg.update,function (value,key) { previous[key] = instance.attributes[key] })
+                instance.set(msg.update)
+                instance.trigger('dbupdate',instance,{changes: msg.update})
+            })
+        })
 
         this.update(msg.select,msg.update, function(err,data) {
             callback(new Msg({ success: true }))
@@ -481,7 +402,7 @@ var JsonCollectionExposer = MsgNode.extend4000({
         // also, maybe accept instance as O in messages
         this.create(instance.render('store'),function(err,data) { 
             instance.trigger('create')
-            callback(err,new Msg({created:data[0]._id}))
+            callback(err,new Msg({created:String(data[0]._id)}))
         })
     }
 })
@@ -536,6 +457,9 @@ var TcpClientNode = TcpNode.extend4000({
     defaults: { name: "tcpclientnode", origin: "tcp" },
     initialize: function() {
         this.host = ( this.get('host') || 'localhost' )
+
+        this.children.on('remove', function () { console.log('removechild' )})
+        this.parents.on('remove', function () { console.log('removeparent' )})
     },
 
     stop: function() {
@@ -608,7 +532,8 @@ var PlainTcpSocket = MsgNode.extend4000({
 
         this.children.on('remove', function() {
             if (!this.children.length) { 
-                this.remove() 
+                console.log('I have no children anymore, dying')
+                this.del()
             }
         }.bind(this))
     },
@@ -621,19 +546,20 @@ var PlainTcpSocket = MsgNode.extend4000({
         var maxbuffer = (this.get('maxbuffer') || 10000)
         buffer = ""
 
-        this.on('remove', function() {
+        this.on('del', function() {
+            console.log('del called, ending socket!')
             try { socket.end() } catch(err) {}
         })
 
-        socket.on('end', function() { this.trigger('disconnect'); this.remove() }.bind(this));
+        socket.on('end', function() { this.trigger('disconnect'); this.del() }.bind(this));
         
         socket.on('data', function(data) {
             data = data.toString('utf8')
-            console.log("RECV",data)
+//            console.log("RECV",data)
             buffer += data
             if (buffer.length > maxbuffer) { 
                 this.log('tcpnode','warning','received too long message from client. kicking it out.')
-                this.remove()
+                this.del()
                 return
             }
             bufferChanged()
@@ -680,7 +606,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         try {
             var rendered 
             if ((rendered = msg.render()) != "{}") {
-                console.log("SEND",rendered)
+        //        console.log("SEND",rendered)
                 this.socket.write(rendered + "\n")
             }
         } catch(err) {
@@ -692,17 +618,14 @@ var PlainTcpSocket = MsgNode.extend4000({
         if ((msg._viral.tcp) && (msg._viral.tcp == this.get('id'))) {
             // sends a new line delimited JSON message BOOOOOM
             this.send(msg)
+        } else { 
+            //console.log('message ignored', this.get('id'))
         }
     })
 })
-
 
 exports.nodes.TcpNode = TcpNode
 exports.nodes.TcpClientNode = TcpClientNode
 exports.nodes.TcpServerNode = TcpServerNode
 exports.nodes.PlainTcpSocket = PlainTcpSocket
-
-
-
-
 
