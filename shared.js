@@ -1,3 +1,5 @@
+
+
 exports.debug = false
 
 // converts retarded magical arguments object to an Array object
@@ -425,9 +427,9 @@ var RemoteModel = Backbone.Model.extend4000({
 
         if (!data.id) {
             this.trigger('create')
-            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), function(err,msg) { this.set({id: msg.created}), callback(err,msg) }.bind(this) )
+            this.get('owner').MsgIn( new Msg({ origin: "store",  create: data }), function(err,msg) { this.set({id: msg.created}); if (callback) { callback(err,msg) } }.bind(this) )
         } else {
-            this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), callback)
+            this.get('owner').MsgIn( new Msg({ origin: "store",  update: data }), function () { if(callback) { callback() } })
         }
         this.changes = {};
     },
@@ -459,9 +461,10 @@ var RemoteModel = Backbone.Model.extend4000({
         return res
     },
 
-    remove: function(callback) {
+    remove: function(callback,silent) {
         this.trigger('modelremove')
-        this.get('owner').MsgIn( new Msg({ origin: "store",  remove: { id: this.get('id') } }), callback )
+        data = { origin: "store",  remove: { id: this.get('id') } }
+        this.get('owner').MsgIn( new Msg(data), callback )
     },
 
     call: function(permission, f, args) {
@@ -480,4 +483,6 @@ var RemoteModel = Backbone.Model.extend4000({
         
     }
 })
+
+
 

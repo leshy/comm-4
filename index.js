@@ -44,6 +44,7 @@ var requirejs = require('requirejs');
 var expression = fs.readFileSync(__dirname + '/shared.js','utf8');
 eval(expression)
 
+
 // --------------------------------------------- SNIP
 var DbCollection = Collection.extend4000({
     defaults: { 
@@ -288,6 +289,14 @@ var JsonCollectionExposer = MsgNode.extend4000({
         return model
     },
 
+    getOne: function (filter,callback) {
+        this.filterModels(filter,function (err,cursor) {
+            cursor.next(function (err,data) {
+                callback(err,data)
+            })
+        })
+    },
+
     filterModels: function(filter,callback,limits) {
         var self = this
 
@@ -298,20 +307,34 @@ var JsonCollectionExposer = MsgNode.extend4000({
         })
     },
     
+    removeModels: function (filter,callback) {
+    },
+    
     removeMsg: function(msg,callback) {
-        // this should be abstracted, filtermsg, and updatemsg use the same thing
-        if (msg.remove.id) { 
-            msg.remove._id = msg.remove.id; delete msg.remove['id'] 
-        }
-        
-        if (msg.remove._id) {
-            msg.remove._id = new BSON.ObjectID(msg.remove._id)
-        }
+        var self = this
+            // this should be abstracted, filtermsg, and updatemsg use the same thing
+            if (msg.remove.id) { 
+                msg.remove._id = msg.remove.id; delete msg.remove['id'] 
+            }
+            
+            if (msg.remove._id) {
+                msg.remove._id = new BSON.ObjectID(msg.remove._id)
+            }
 
-        this.remove(msg.remove, function(err,res) {
-            callback()
-        })
+        function notifyModels (callback) {
+            self.filterModels(msg.remove,function (err,cursor) {
+                cursor.each(function (model) {
+                    if (model) { model.trigger('remove') } else { callback(); return }
+                })
+            })
+        }
         
+        
+        notifyModels(function () {
+            self.remove(msg.remove, function(err,res) {
+                callback()
+            })
+        })
     },
 
     filterMsg: function(msg,callback,response) { 
