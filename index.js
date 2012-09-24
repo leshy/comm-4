@@ -393,7 +393,7 @@ var JsonCollectionExposer = MsgNode.extend4000({
             msg.select._id = new BSON.ObjectID(msg.select._id)
         }
         
-        console.log('updatemsg',msg.select,msg.update)
+        //console.log('updatemsg',msg.select,msg.update)
 
         // call hooks on models
         this.filterModels(msg.select,function (err,cursor,mongocursor) {  
@@ -469,8 +469,7 @@ var TcpNode = MsgNode.extend4000({
     },
 
     stop: function() {
-        this.trigger('stop')
-        this.parents.map(function(socketNode) { socketNode.remove() })
+        this.trigger('remove')
     }
 })
 
@@ -516,7 +515,7 @@ var TcpServerNode = TcpNode.extend4000({
     defaults: { name: "tcpservernode", origin: "tcp" },
     
     stop: function() {
-        console.log('server stop')
+//        console.log('server stop')
         TcpNode.prototype.stop.apply(this)
         try {
             this.server.close()
@@ -555,7 +554,7 @@ var PlainTcpSocket = MsgNode.extend4000({
 
         this.children.on('remove', function() {
             if (!this.children.length) { 
-                console.log('I have no children anymore, dying')
+//                console.log('I have no children anymore, dying')
                 this.del()
             }
         }.bind(this))
@@ -570,7 +569,7 @@ var PlainTcpSocket = MsgNode.extend4000({
         buffer = ""
 
         this.on('del', function() {
-            console.log('del called, ending socket!')
+//            console.log('del called, ending socket!')
             try { socket.end() } catch(err) {}
         })
 

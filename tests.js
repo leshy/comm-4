@@ -34,12 +34,10 @@ exports.tcpComm = function(test) {
     
     var client = new comm.nodes.TcpClientNode({port: 8888, name:'testclient'})
 //    client.debug = true
-
-
-
+    
     server.subscribe({"test" : true}, function(msg,callback,reply) { 
         reply.write({serverreply: 333})
-//        reply.end({serverreply: 333})
+//        reply.end({serverreply: 'done'})
         callback(undefined,new comm.Msg({serverreply:'done'}))
     })
     
@@ -49,18 +47,36 @@ exports.tcpComm = function(test) {
     })
     
     server.subscribe({clientreply:'done'}, function() {
-        server.remove()
-        client.remove()
-        test.done()
+        //server.stop()
+        client.stop()
+        var client2 = new comm.nodes.TcpClientNode({port: 8888, name:'testclient2'})
+
+        client2.lobby.Allow({'*': true})
+        server.send({bla: 3})
+        client2.subscribe({serverreply: 'done'}, function(msg,callback,reply) {
+            server.send({bla: 3})
+            client2.stop()
+            server.send({bla: 3})
+            server.stop()
+            test.done()
+        })
+
+        client2.start(function (err) {
+            if (err) { test.failed(); return }
+            // send two messages
+            client2.send(new comm.Msg({bla: true, lala: 22}))
+            client2.send(new comm.Msg({test: { a : 'x', b: 3} , lalala: 22}))
+            
+        })
+        
+        //test.done()
     })
-
-
+    
     client.start(function(err) {
         if (err) { test.failed(); return }
         // send two messages
         client.send(new comm.Msg({bla: true, lala: 22}))
         client.send(new comm.Msg({test: { a : 'x', b: 3} , lalala: 22}))
-    })    
+    })
 }
-
 
