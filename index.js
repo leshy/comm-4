@@ -175,8 +175,8 @@ ModelIterator.prototype.count = function () { this.cursor.count.apply(this.curso
 
 
 var ModelCollectionExposer = MsgNode.extend4000({
-
-
+    
+    
 })
 
 
@@ -479,9 +479,6 @@ var TcpClientNode = TcpNode.extend4000({
     defaults: { name: "tcpclientnode", origin: "tcp" },
     initialize: function() {
         this.host = ( this.get('host') || 'localhost' )
-
-        this.children.on('remove', function () { console.log('removechild' )})
-        this.parents.on('remove', function () { console.log('removeparent' )})
     },
 
     stop: function() {
@@ -533,13 +530,14 @@ var TcpServerNode = TcpNode.extend4000({
         }.bind(this)).listen(this.port)
 
         this.parents.on('remove',function(parent) {
+//            console.log("NODE DISCONNECTED".green)
             this.MsgIn( { tcp: { disconnect: parent.get('id') } })
         }.bind(this))
     }
 })
 
 
-// each tcpnode (tcpserver or client) have socket nodes as their children.
+// each tcpnode (tcpserver or client) has socket nodes as their children.
 // socket nodes represent concrete connections, client tcp node has only one socket node as a child
 var PlainTcpSocket = MsgNode.extend4000({
 
@@ -567,12 +565,11 @@ var PlainTcpSocket = MsgNode.extend4000({
         var socket = this.socket
         var maxbuffer = (this.get('maxbuffer') || 10000)
         buffer = ""
-
+        
         this.on('del', function() {
-//            console.log('del called, ending socket!')
             try { socket.end() } catch(err) {}
         })
-
+        
         socket.on('end', function() { this.trigger('disconnect'); this.del() }.bind(this));
         
         socket.on('data', function(data) {

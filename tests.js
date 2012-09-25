@@ -25,7 +25,7 @@ exports.internalComm = function(test){
 exports.tcpComm = function(test) {
 
     var server = new comm.nodes.TcpServerNode({port: 8888, name:'testserver'})
-//    server.debug = true
+    //    server.debug = true
     server.start()
     
     var data = []
@@ -33,11 +33,11 @@ exports.tcpComm = function(test) {
     server.lobby.Allow({'test': true})
     
     var client = new comm.nodes.TcpClientNode({port: 8888, name:'testclient'})
-//    client.debug = true
+    //    client.debug = true
     
     server.subscribe({"test" : true}, function(msg,callback,reply) { 
         reply.write({serverreply: 333})
-//        reply.end({serverreply: 'done'})
+        //        reply.end({serverreply: 'done'})
         callback(undefined,new comm.Msg({serverreply:'done'}))
     })
     
@@ -47,29 +47,35 @@ exports.tcpComm = function(test) {
     })
     
     server.subscribe({clientreply:'done'}, function() {
-        //server.stop()
+
+        test.equals(server.parents.length,1)
+
         client.stop()
-        var client2 = new comm.nodes.TcpClientNode({port: 8888, name:'testclient2'})
 
-        client2.lobby.Allow({'*': true})
-        server.send({bla: 3})
-        client2.subscribe({serverreply: 'done'}, function(msg,callback,reply) {
-            server.send({bla: 3})
-            client2.stop()
-            server.send({bla: 3})
-            server.stop()
-            test.done()
-        })
-
-        client2.start(function (err) {
-            if (err) { test.failed(); return }
-            // send two messages
-            client2.send(new comm.Msg({bla: true, lala: 22}))
-            client2.send(new comm.Msg({test: { a : 'x', b: 3} , lalala: 22}))
+        setTimeout(function () {
+            test.equals(server.parents.length,0)
             
+            var client2 = new comm.nodes.TcpClientNode({port: 8888, name:'testclient2'})
+
+            client2.lobby.Allow({'*': true})
+
+            server.send({bla: 3})
+
+            client2.subscribe({serverreply: 'done'}, function(msg,callback,reply) {
+                server.send({bla: 3})
+                client2.stop()
+                server.send({bla: 3})
+                server.stop()
+                test.done()
+            })
+
+            client2.start(function (err) {
+                if (err) { test.failed(); return }
+                // send two messages
+                client2.send(new comm.Msg({bla: true, lala: 22}))
+                client2.send(new comm.Msg({test: { a : 'x', b: 3} , lalala: 22}))
+            })
         })
-        
-        //test.done()
     })
     
     client.start(function(err) {
