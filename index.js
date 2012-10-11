@@ -29,7 +29,7 @@
 // each msgparser could return an iterator object? SWEET
 // - SOLVED SORTA
 
-var Backbone = require('backbone');
+var Backbone = require('backbone4000');
 var _ = require('underscore');
 var decorators = require('decorators');
 var decorate = decorators.decorate;
